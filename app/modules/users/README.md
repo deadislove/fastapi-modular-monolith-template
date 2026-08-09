@@ -5,8 +5,8 @@ Bounded context for identity: credentials, authentication, and account records.
 ## Owns
 
 - **Table**: `users` — schema `users` in PostgreSQL (`public` in SQLite dev/test,
-  where cross-schema separation isn't modeled). See root README's
-  [Enforcing boundaries](../../../README.md#enforcing-boundaries) for why.
+  where cross-schema separation isn't modeled). See
+  [`docs/architecture.md`](../../../docs/architecture.md#enforcing-boundaries) for why.
 
 ## Public surface
 
@@ -28,8 +28,8 @@ by `.importlinter` at the root.
 | `UserRegistered` | After a registration transaction commits | `events.py` |
 
 Subscribers are wired at the composition root (`app/main.py`), not here — this
-module never knows who (if anyone) is listening. See root README's
-[Domain events](../../../README.md#domain-events--the-alternative-to-a-facade).
+module never knows who (if anyone) is listening. See
+[`docs/cross-module-communication.md`](../../../docs/cross-module-communication.md#3-domain-events--fire-and-forget-side-effects).
 
 ## Dependencies on other modules
 

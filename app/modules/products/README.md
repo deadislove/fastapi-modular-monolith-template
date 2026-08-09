@@ -5,8 +5,8 @@ Bounded context for the product catalog: listings, pricing, stock, and ownership
 ## Owns
 
 - **Table**: `products` — schema `products` in PostgreSQL (`public` in SQLite
-  dev/test). See root README's
-  [Enforcing boundaries](../../../README.md#enforcing-boundaries).
+  dev/test). See
+  [`docs/architecture.md`](../../../docs/architecture.md#enforcing-boundaries).
 
 ## Public surface
 
@@ -24,8 +24,8 @@ by `.importlinter` at the root.
 ## Published events
 
 None yet. If you add one (e.g. `ProductCreated`), follow the pattern in
-`users/events.py` and wire the subscriber in `app/main.py` — see root README's
-[Domain events](../../../README.md#domain-events--the-alternative-to-a-facade).
+`users/events.py` and wire the subscriber in `app/main.py` — see
+[`docs/cross-module-communication.md`](../../../docs/cross-module-communication.md#3-domain-events--fire-and-forget-side-effects).
 
 ## Dependencies on other modules
 
@@ -43,4 +43,6 @@ None yet. If you add one (e.g. `ProductCreated`), follow the pattern in
   swallows handler exceptions, which makes it the wrong tool for an integrity
   guarantee like this one. In PostgreSQL, with schema-per-module, this becomes a
   genuine cross-schema foreign key (`products.products` → `users.users`); that's the
-  visible cost of the tradeoff, not a bug.
+  visible cost of the tradeoff, not a bug. Full writeup, including how this was
+  verified end-to-end against a real PostgreSQL instance:
+  [`docs/database.md`](../../../docs/database.md#the-one-deliberate-cross-module-foreign-key).
