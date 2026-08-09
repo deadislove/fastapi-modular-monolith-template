@@ -1,0 +1,54 @@
+[importlinter]
+root_package = app
+include_external_packages = True
+
+# Layering: presentation depends on orchestration depends on modules depends on
+# shared infra — never the other way around. Catches e.g. app.shared importing
+# from app.modules, or app.modules reaching back up into app.api.
+[importlinter:contract:layering]
+name = api -> facades -> modules -> shared layering
+type = layers
+layers =
+    api
+    facades
+    modules
+    shared
+containers =
+    app
+
+# Each module's implementation details (repository.py, service.py) are private.
+# Only public_api.py, schemas.py, errors.py, and models.py (the value objects
+# public_api returns) may be imported from outside the module.
+#
+# `forbidden` contracts check reachability transitively, so without ignore_imports
+# the legitimate public_api.py -> service.py -> repository.py chain inside the
+# module would itself trip the contract. Excluding those two internal edges leaves
+# only genuine outside-in shortcuts (e.g. app.api importing repository.py directly)
+# as violations.
+[importlinter:contract:users-internals]
+name = users module internals are private
+type = forbidden
+source_modules =
+    app.api
+    app.facades
+    app.modules.products
+forbidden_modules =
+    app.modules.users.repository
+    app.modules.users.service
+ignore_imports =
+    app.modules.users.public_api -> app.modules.users.service
+    app.modules.users.public_api -> app.modules.users.repository
+
+[importlinter:contract:products-internals]
+name = products module internals are private
+type = forbidden
+source_modules =
+    app.api
+    app.facades
+    app.modules.users
+forbidden_modules =
+    app.modules.products.repository
+    app.modules.products.service
+ignore_imports =
+    app.modules.products.public_api -> app.modules.products.service
+    app.modules.products.public_api -> app.modules.products.repository
