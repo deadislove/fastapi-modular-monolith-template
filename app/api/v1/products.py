@@ -10,19 +10,19 @@ from app.modules.products.schemas import (
     ProductResponse,
     ProductUpdateRequest,
 )
-from app.shared.errors import ForbiddenError, NotFoundError
+from app.shared.errors import DomainError, ForbiddenError, NotFoundError
 from app.shared.security import get_current_user_id
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
-def _map_product_error(err: object) -> HTTPException:
+def _map_product_error(err: DomainError) -> HTTPException:
     """Map domain errors to HTTP responses — presentation layer concern only."""
     if isinstance(err, (ProductNotFoundError, NotFoundError)):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err.message)
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err.as_detail())
     if isinstance(err, (ProductForbiddenError, ForbiddenError)):
-        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err.message)
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err.as_detail())
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err.as_detail())
 
 
 @router.post(

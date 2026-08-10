@@ -7,6 +7,10 @@ class DomainError:
     message: str
     code: str = "DOMAIN_ERROR"
 
+    def as_detail(self) -> dict[str, str]:
+        """HTTPException(detail=...) payload — see app/shared/exception_handler.py."""
+        return {"code": self.code, "message": self.message}
+
 
 @dataclass(frozen=True)
 class NotFoundError(DomainError):

@@ -18,10 +18,12 @@ every push instead of only when someone remembers to.
 |------|-------|--------|
 | `test_users.py` / `test_products.py` | HTTP (via `httpx.AsyncClient` + `ASGITransport`) | Per-module request/response behavior, one module at a time |
 | `test_facade.py` | HTTP setup, facade called directly | Cross-module composition (`get_user_with_products`), and that `UnitOfWork` actually rolls back when a write should be rejected |
-| `test_orders.py` | HTTP | The three-module `OrderFacade` flow: placing an order, insufficient stock, ownership checks — including that a failed stock reservation leaves both `products`' stock and `orders`' row count unchanged |
+| `test_orders.py` | HTTP | The three-module `OrderFacade` flow: placing an order, insufficient stock, ownership checks, that a failed stock reservation leaves both `products`' stock and `orders`' row count unchanged, and that the `BackgroundTasks` fulfillment notification is actually scheduled (via `unittest.mock.patch`, not log-scraping — see below) |
 | `test_events.py` | Unit (`EventBus` in isolation) + integration | `EventBus` semantics (dispatch, no-subscriber no-op, one handler's failure doesn't block others, unsubscribe), plus a real HTTP registration proving the `main.py` subscriber wiring actually fires |
 | `test_public_api_di.py` | Unit | Constructing a `UserPublicApi` with an explicit `session_factory`, fully isolated from the process-wide `AsyncSessionFactory` global |
 | `test_architecture.py` | Static analysis, run as a test | Executes `.importlinter`'s contracts via `importlinter.cli.lint_imports()` and asserts success |
+| `test_error_envelope.py` | HTTP | Every error shape (404 domain error, 422 validation, 401 auth, 429 rate limit) uses the same `{"error": {"code", "message"}}` envelope |
+| `test_health.py` | HTTP | `/health` is always 200; `/health/ready` reflects real DB reachability (including a simulated-outage case) |
 
 `tests/conftest.py` wires an in-memory SQLite database (`sqlite+aiosqlite:///:memory:`)
 shared across the whole test session, and patches `app.shared.database.AsyncSessionFactory`
@@ -104,3 +106,30 @@ are used to deal with this:
 
 Pick whichever fits: if you don't need the registration response, reuse is fine and
 matches the existing tests; if you do, give the test its own identity.
+
+## A gotcha found by running the real server, not by testing: silent app loggers
+
+Every `logger.info(...)` call in this codebase — the `EventBus` subscribers in
+`app/main.py`, the `BackgroundTasks` handler in `app/api/v1/orders.py`, the
+exception handler's `logger.exception(...)` — produced **no output at all**
+under plain `uvicorn app.main:app`, discovered only by actually running the
+server and grepping its log, not by reading the code or running `pytest`.
+uvicorn configures its own `"uvicorn"` / `"uvicorn.access"` loggers but attaches
+no handler to the root logger, so `app.*` loggers (which propagate to root by
+default) had nowhere to go. Fixed with one `logging.basicConfig(...)` call in
+`app/main.py`. This is exactly the class of bug `pytest` can't catch — nothing
+asserts on log *visibility* — which is why actually running the app (`uvicorn
+app.main:app`, per the root README's Quick Start) and driving a real request
+through it matters even with a fully green test suite.
+
+## Why `test_place_order_schedules_fulfillment_background_task` uses `unittest.mock.patch`, not `caplog`
+
+The first version of this test used pytest's `caplog` fixture to look for the
+background task's log line. It failed even though the task demonstrably ran
+(confirmed via the real server, above) — `caplog`'s capture doesn't reliably
+line up with a `BackgroundTasks` callback's execution window when the app is
+driven through `httpx.ASGITransport` in-process. Patching
+`app.api.v1.orders._notify_fulfillment` with `unittest.mock.AsyncMock` and
+asserting `assert_awaited_once_with(...)` is both more reliable and more
+precise — it checks the exact arguments the background task was scheduled
+with, not just that some matching text appeared somewhere in a log.

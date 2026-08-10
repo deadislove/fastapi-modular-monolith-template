@@ -77,7 +77,10 @@ writes.
 ## 6. API layer
 
 - `app/api/v1/<name>.py`: router with a `_map_<name>_error` function translating
-  the module's (and any module it depends on's) errors to HTTP status codes.
+  the module's (and any module it depends on's) errors to HTTP status codes. Use
+  `HTTPException(status_code=..., detail=err.as_detail())` — not `detail=err.message`
+  — so the response matches the rest of the API's `{"error": {"code",
+  "message"}}` envelope (see [architecture.md](architecture.md#result-pattern-over-exceptions)).
   Copy an existing router's error-mapping style.
 - Register it in `app/api/v1/router.py`:
   `api_v1_router.include_router(<name>_router)`.

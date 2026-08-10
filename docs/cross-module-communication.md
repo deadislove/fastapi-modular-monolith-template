@@ -1,14 +1,15 @@
 # Cross-module communication
 
 "Modules only talk through `public_api.py`" tells you what's forbidden, not what to
-reach for instead. This project has three sanctioned patterns, each suited to a
+reach for instead. This project has four sanctioned patterns, each suited to a
 different question:
 
-| Pattern | Question it answers | Caller gets a result? | Where it lives |
-|---|---|---|---|
-| Direct `public_api` call | "I need this one module's data/action" | Yes | Anywhere (router, another module, a facade) |
-| Facade + `UnitOfWork` | "I need two modules to do something *together*, atomically, and I need to know if it worked" | Yes | `app/facades/` only |
-| Domain event | "Module A wants module B (or C, or nobody) to react, but A doesn't need to know or wait" | No | Published in the module, subscribed at the composition root |
+| Pattern | Question it answers | Caller gets a result? | Blocks the HTTP response? | Where it lives |
+|---|---|---|---|---|
+| Direct `public_api` call | "I need this one module's data/action" | Yes | Yes | Anywhere (router, another module, a facade) |
+| Facade + `UnitOfWork` | "I need two modules to do something *together*, atomically, and I need to know if it worked" | Yes | Yes | `app/facades/` only |
+| Domain event | "Module A wants module B (or C, or nobody) to react, but A doesn't need to know or wait" | No | **Yes** — see below | Published in the module, subscribed at the composition root |
+| `BackgroundTasks` | "This one handler has extra work to do that the client shouldn't have to wait for" | No | No | Scheduled in the router, right before returning |
 
 ## 1. Direct `public_api` calls
 
@@ -196,6 +197,50 @@ tradeoff in full. `orders` is the contrast: it references `users`/`products` by
 plain id, no FK, because a Facade validates both ids inside the same transaction
 that writes the order — see `app/modules/orders/README.md`.
 
+## 4. `BackgroundTasks` — deferred, not decoupled
+
+It's tempting to assume the `EventBus` already makes work "non-blocking" for the
+client, since the publisher doesn't get a return value back. It doesn't:
+`await event_bus.publish(...)` is still `await`ed inside the request handler, so
+the HTTP response isn't sent until every subscriber has finished running. A slow
+handler (a real email API call, say) makes the request slow, even though the code
+is decoupled. Decoupling (not knowing who's listening) and non-blocking (not
+waiting for it) are independent properties — the `EventBus` gives you the first,
+not the second.
+
+FastAPI's `BackgroundTasks` gives you the second: work scheduled on it runs
+*after* the response has already been sent to the client. `place_order`
+(`app/api/v1/orders.py`) uses it for a simulated fulfillment notification:
+
+```python
+async def place_order(
+    body: OrderCreateRequest,
+    background_tasks: BackgroundTasks,
+    current_user_id: int = Depends(get_current_user_id),
+) -> OrderResponse:
+    result = await order_facade.place_order(current_user_id, body.product_id, body.quantity)
+    if result.is_err():
+        raise _map_order_error(result.err())
+    order = result.ok()
+    background_tasks.add_task(_notify_fulfillment, order.id, order.product_id, order.quantity)
+    return OrderResponse.model_validate(order)
+```
+
+The client gets its `201` as soon as the order is placed; `_notify_fulfillment`
+runs afterward, in-process, on the same event loop. Like `EventBus.publish`, its
+body is wrapped in a `try`/`except` that logs rather than propagates — there's no
+request left to fail by the time it runs, so an uncaught exception here would just
+vanish into the server logs (or crash the worker, depending on the ASGI server),
+neither of which is useful.
+
+This is still an in-process, best-effort mechanism: if the server process dies
+between sending the response and running the task, the task is lost, same
+durability ceiling as the `EventBus` (see
+[above](#why-handler-exceptions-are-swallowed--and-what-that-rules-out)). For work
+that must survive a crash or a restart — a real order-fulfillment pipeline, not
+this template's simulated one — reach for an actual task queue (Celery, ARQ,
+Dramatiq) with persistent storage instead of either of these.
+
 ## Decision guide
 
 - Need one module's data or to perform one module's action? → **direct `public_api`
@@ -204,7 +249,10 @@ that writes the order — see `app/modules/orders/README.md`.
   if it involves more than one write that has to succeed or fail as a unit? →
   **Facade + `UnitOfWork`**.
 - Need to notify interested parties that something happened, and it's fine if
-  nobody's listening or a listener fails? → **domain event**.
+  nobody's listening or a listener fails? → **domain event** — but remember it's
+  still awaited in-request; a slow handler still slows the response.
+- Need the client to get its response *before* some extra work runs, and it's fine
+  if that work is lost on a crash? → **`BackgroundTasks`**.
 - Need a hard guarantee (referential integrity, an atomic multi-row invariant) that
   spans two modules' tables? → that's the one case where a narrow, explicit,
   documented DB-level constraint (like the products→users foreign key) can be the

@@ -82,6 +82,16 @@ The presentation layer (`app/api/v1/*.py`) is the only place that converts a
 `Result`'s `Err` into an HTTP status code — see each router's `_map_*_error`
 function. Domain code never encodes HTTP concerns.
 
+Every `DomainError` has an `as_detail()` method (`{"code": ..., "message": ...}`)
+that routers pass as `HTTPException(detail=...)`. A shared `HTTPException` handler
+in `app/shared/exception_handler.py` — plus matching handlers for FastAPI's
+`RequestValidationError` (422) and slowapi's `RateLimitExceeded` (429) — wraps
+every one of these into the same top-level envelope:
+`{"error": {"code": ..., "message": ...}}`. Without this, a domain 404 and an
+unhandled 500 would come back in two different shapes (they used to: `{"detail":
+...}` vs `{"error": ..., "message": ...}`), which pushes every API client into
+writing two error-parsing paths instead of one.
+
 This choice has one sharp edge worth knowing about explicitly: because failure is a
 return value, not a raised exception, "no exception was raised" does **not** mean
 "this operation succeeded" or "it's safe to commit." See

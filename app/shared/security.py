@@ -40,7 +40,7 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
     """FastAPI dependency — extracts and validates the caller's user id from Bearer token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail={"code": "INVALID_TOKEN", "message": "Could not validate credentials"},
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:

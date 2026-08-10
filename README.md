@@ -8,7 +8,8 @@ High-cohesion, low-coupling **Modular Monolith** built with:
 - **Result Pattern** (`result` library) for cross-module communication
 - **Rate Limiting** (slowapi)
 - **API Versioning** (`/api/v1/`)
-- **Global Exception Handler**
+- **Unified error responses** — `{"error": {"code", "message"}}` for every 4xx/5xx, domain or otherwise
+- **Liveness/readiness health checks** — `/health` vs `/health/ready` (DB ping)
 - **Alembic** migrations
 - **Multi-stage Dockerfile** + `docker-compose.yml`
 
@@ -112,7 +113,8 @@ uvicorn app.main:app --reload
 | POST | `/api/v1/orders/` | ✓ | Place an order (reserves stock atomically) |
 | GET | `/api/v1/orders/my` | ✓ | List my orders (`limit`, `offset`) |
 | GET | `/api/v1/orders/{id}` | ✓ | Get order by ID (owner only) |
-| GET | `/health` | — | Health check |
+| GET | `/health` | — | Liveness — always 200 if the process is up |
+| GET | `/health/ready` | — | Readiness — 503 if the database is unreachable |
 
 List endpoints default to `limit=50` (max `100`) and are ordered by `id` for stable
 paging — see `BaseRepository.get_all`.

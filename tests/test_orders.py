@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 
@@ -154,3 +156,19 @@ async def test_get_order_forbidden_for_other_user(client: AsyncClient) -> None:
     )
 
     assert response.status_code == 403
+
+
+async def test_place_order_schedules_fulfillment_background_task(client: AsyncClient) -> None:
+    """Proves the BackgroundTasks wiring actually runs (with the right args),
+    not just that the endpoint accepts a BackgroundTasks param."""
+    _, token = await _register_and_login(client, "order_judy")
+    product_id = await _create_product(client, token, stock=10)
+
+    with patch("app.api.v1.orders._notify_fulfillment", new_callable=AsyncMock) as mock_notify:
+        response = await client.post(
+            "/api/v1/orders/",
+            json={"product_id": product_id, "quantity": 1},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        order_id = response.json()["id"]
+        mock_notify.assert_awaited_once_with(order_id, product_id, 1)

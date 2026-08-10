@@ -15,22 +15,22 @@ from app.modules.users.schemas import (
     UserResponse,
     UserUpdateRequest,
 )
-from app.shared.errors import ConflictError, NotFoundError, UnauthorizedError
+from app.shared.errors import ConflictError, DomainError, NotFoundError, UnauthorizedError
 from app.shared.rate_limiter import limiter
 from app.shared.security import get_current_user_id
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-def _map_user_error(err: object) -> HTTPException:
+def _map_user_error(err: DomainError) -> HTTPException:
     """Map domain errors to HTTP responses — presentation layer concern only."""
     if isinstance(err, (UserNotFoundError, NotFoundError)):
-        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err.message)
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err.as_detail())
     if isinstance(err, (UserEmailConflictError, UserUsernameConflictError, ConflictError)):
-        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err.message)
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err.as_detail())
     if isinstance(err, (InvalidCredentialsError, UserInactiveError, UnauthorizedError)):
-        return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=err.message)
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+        return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=err.as_detail())
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err.as_detail())
 
 
 @router.post(
