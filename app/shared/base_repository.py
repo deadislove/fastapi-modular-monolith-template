@@ -22,8 +22,7 @@ class BaseRepository(Generic[ModelT]):
         return result.scalar_one_or_none()
 
     async def get_all(self, limit: int | None = None, offset: int = 0) -> list[ModelT]:
-        # Order by id — LIMIT/OFFSET without a deterministic ORDER BY can return
-        # rows in a different order (or skip/repeat rows) between pages.
+        # Deterministic order — LIMIT/OFFSET without one can skip or repeat rows across pages.
         stmt = select(self.model).order_by(self.model.id).offset(offset)  # type: ignore[attr-defined]
         if limit is not None:
             stmt = stmt.limit(limit)

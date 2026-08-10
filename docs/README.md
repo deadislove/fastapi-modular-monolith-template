@@ -10,19 +10,21 @@ Docker, API endpoint list); these docs cover the *why* behind the design.
 | [cross-module-communication.md](cross-module-communication.md) | The three ways modules talk to each other, and when to use which |
 | [database.md](database.md) | Session lifecycle, `UnitOfWork`, schema-per-module, migrations |
 | [testing.md](testing.md) | Test suite map, strategy, and the gotchas the suite already ran into |
+| [adding-a-module.md](adding-a-module.md) | Checklist for adding a new module, written from actually adding `orders` |
 
 Each module also documents its own contract next to its code — start there for a
 single module's specifics:
 [`app/modules/users/README.md`](../app/modules/users/README.md),
-[`app/modules/products/README.md`](../app/modules/products/README.md).
+[`app/modules/products/README.md`](../app/modules/products/README.md),
+[`app/modules/orders/README.md`](../app/modules/orders/README.md).
 
 ## Reading order
 
 If you're new to this codebase, read in this order:
 
 1. **architecture.md** — the shape of the system and the rule everything else follows.
-2. **cross-module-communication.md** — how the `users` and `products` modules
-   actually talk to each other in practice, since "no direct imports" alone doesn't
-   tell you what to do instead.
+2. **cross-module-communication.md** — how modules actually talk to each other in
+   practice, since "no direct imports" alone doesn't tell you what to do instead.
 3. **database.md** and **testing.md** as needed — reference material for when
    you're touching persistence or writing tests.
+4. **adding-a-module.md** — when you're ready to add your own.

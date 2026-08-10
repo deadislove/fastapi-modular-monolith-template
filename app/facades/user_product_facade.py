@@ -22,10 +22,9 @@ class UserWithProducts:
 
 
 class UserProductFacade:
-    """
-    Cross-module orchestrator — the only place allowed to call both UserPublicApi
-    and ProductPublicApi in the same operation. Result chaining keeps error paths clean.
-    """
+    """Coordinates users and products. Facades are the only code allowed to
+    call more than one module's public_api in one operation — see also
+    OrderFacade for a three-module example."""
 
     def __init__(
         self,
@@ -57,15 +56,8 @@ class UserProductFacade:
         description: str | None = None,
         stock: int = 0,
     ) -> Result[Product, UserError | ProductError | DomainError]:
-        """
-        Validate user exists before creating a product on their behalf.
-
-        Runs the existence check and the product write inside one UnitOfWork so
-        both module calls share a single transaction and connection. We only
-        commit once the product write itself reports Ok — any Err result (from
-        either module) falls through to UnitOfWork's default rollback, so a
-        failed creation can never leave a half-applied write behind.
-        """
+        """Validate user exists before creating a product on their behalf, in one
+        UnitOfWork so a missing user can't leave a half-applied write behind."""
         async with UnitOfWork() as session:
             user_result = await self._user_api.get_user_by_id(user_id, session=session)
             if user_result.is_err():

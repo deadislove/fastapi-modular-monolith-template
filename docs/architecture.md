@@ -15,13 +15,13 @@ become its own service, the seams are already where they'd need to be.
                          │ depends on
 ┌───────────────────────▼───────────────────────────────────┐
 │                      app/facades/                         │  orchestration
-│      (the only code allowed to call two modules'          │
-│       public_api in one operation)                        │
+│      (the only code allowed to call more than one          │
+│       module's public_api in one operation)                │
 └───────────────────────┬───────────────────────────────────┘
                          │ depends on
 ┌───────────────────────▼───────────────────────────────────┐
 │                     app/modules/*/                        │  domain
-│   users/                          products/                │
+│   users/          products/          orders/                │
 │   ├── public_api.py  ◄─────────── only this is importable  │
 │   ├── events.py          from outside the module           │
 │   ├── schemas.py                                            │
@@ -64,7 +64,10 @@ outside the module, not even another module's `public_api.py`, may import them.
 
 Each module also has its own README with the exact list of what it publishes and
 depends on: [`app/modules/users/README.md`](../app/modules/users/README.md),
-[`app/modules/products/README.md`](../app/modules/products/README.md).
+[`app/modules/products/README.md`](../app/modules/products/README.md),
+[`app/modules/orders/README.md`](../app/modules/orders/README.md). Adding a new
+module yourself? [`docs/adding-a-module.md`](adding-a-module.md) is a checklist,
+written from actually adding `orders`.
 
 ## Result pattern over exceptions
 
@@ -87,10 +90,9 @@ concretely.
 
 ## Protocol-based module contracts
 
-`app/facades/user_product_facade.py` depends on `UserPublicApiProtocol` /
-`ProductPublicApiProtocol` (`typing.Protocol`, defined in each module's
-`public_api.py`) rather than the concrete `UserPublicApi` / `ProductPublicApi`
-classes. Two reasons:
+Every facade — `UserProductFacade`, `OrderFacade` — depends on each module's
+`*PublicApiProtocol` (`typing.Protocol`, defined in that module's `public_api.py`)
+rather than its concrete `*PublicApi` class. Two reasons:
 
 1. It makes the contract a facade relies on explicit and reviewable in one place,
    separate from the implementation.
@@ -113,21 +115,26 @@ live in `.importlinter` at the repo root:
 lint-imports
 ```
 
-Three contracts run:
+Four contracts run:
 
 1. **Layering** (`api → facades → modules → shared`) — a `type = layers` contract.
    A lower layer can never import from a higher one.
-2. **`users` internals are private** — a `type = forbidden` contract blocking any
-   import of `app.modules.users.repository` or `app.modules.users.service` from
-   outside the module.
-3. **`products` internals are private** — the same, for `products`.
+2. **`users` internals are private**, 3. **`products` internals are private**,
+   4. **`orders` internals are private** — one `type = forbidden` contract per
+   module, blocking any import of that module's `repository.py`/`service.py`
+   from outside it. Every other module's name is listed in `source_modules` (so
+   `orders` importing `users.repository` is caught exactly like `app.api` doing
+   the same).
 
-One subtlety in contracts 2 and 3: `forbidden` contracts check reachability
+One subtlety in contracts 2–4: `forbidden` contracts check reachability
 *transitively*, so without `ignore_imports` in `.importlinter`, the legitimate
 `public_api.py → service.py → repository.py` chain *inside* the module would itself
 trip the contract (since `public_api.py` is externally reachable and it imports
 `service.py`). The `ignore_imports` entries exclude exactly those two internal
-edges, so what's left flagged is a genuine outside-in shortcut.
+edges, so what's left flagged is a genuine outside-in shortcut. Adding a new
+module means adding both a new `forbidden` contract for it, and its name to the
+other contracts' `source_modules` — see
+[`docs/adding-a-module.md`](adding-a-module.md).
 
 This also runs as part of the test suite (`tests/test_architecture.py`), so a
 boundary violation shows up as a normal failing test, not a separate step someone

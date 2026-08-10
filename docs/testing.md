@@ -6,12 +6,19 @@ ruff check .         # lint
 lint-imports         # architecture boundary contracts (also runs inside pytest)
 ```
 
+`.github/workflows/ci.yml` runs exactly these three on every push/PR, plus a
+second job that applies both Alembic migrations against a real PostgreSQL
+service container — the same schema-per-module path described in
+[database.md](database.md#schema-per-module-isolation-postgresql), checked on
+every push instead of only when someone remembers to.
+
 ## Test suite map
 
 | File | Level | Covers |
 |------|-------|--------|
 | `test_users.py` / `test_products.py` | HTTP (via `httpx.AsyncClient` + `ASGITransport`) | Per-module request/response behavior, one module at a time |
 | `test_facade.py` | HTTP setup, facade called directly | Cross-module composition (`get_user_with_products`), and that `UnitOfWork` actually rolls back when a write should be rejected |
+| `test_orders.py` | HTTP | The three-module `OrderFacade` flow: placing an order, insufficient stock, ownership checks — including that a failed stock reservation leaves both `products`' stock and `orders`' row count unchanged |
 | `test_events.py` | Unit (`EventBus` in isolation) + integration | `EventBus` semantics (dispatch, no-subscriber no-op, one handler's failure doesn't block others, unsubscribe), plus a real HTTP registration proving the `main.py` subscriber wiring actually fires |
 | `test_public_api_di.py` | Unit | Constructing a `UserPublicApi` with an explicit `session_factory`, fully isolated from the process-wide `AsyncSessionFactory` global |
 | `test_architecture.py` | Static analysis, run as a test | Executes `.importlinter`'s contracts via `importlinter.cli.lint_imports()` and asserts success |
@@ -30,6 +37,17 @@ a nonexistent `user_id`, assert the `Result` is `Err`, then assert the product
 table's row count is unchanged. Without this test, a future change that broke the
 "default to rollback" behavior (see [database.md](database.md#unitofwork)) would
 only show up as silent data corruption in production, not a failing test.
+
+## Why `test_place_order_rolls_back_stock_on_insufficient_stock` exists
+
+The facade rollback test above proves `UnitOfWork` works for one module's write
+guarded by another module's read. This test proves the stronger claim: it holds
+when **two different modules both write** inside the same `UnitOfWork`
+(`products`' stock reservation, `orders`' new row). Ordering more than the
+available stock must leave both untouched — not just the order missing, but the
+stock reservation that ran first also undone. This was also checked by hand
+against real PostgreSQL when `orders` was added; see
+[database.md](database.md#verifying-against-real-postgresql-what-was-actually-checked).
 
 ## Why `test_architecture.py` exists
 

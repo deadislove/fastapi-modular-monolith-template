@@ -26,10 +26,15 @@ Most of `app/api/v1/*.py` is this.
 
 ## 2. Facade + `UnitOfWork` — when you need an atomic result
 
-A **Facade** (`app/facades/user_product_facade.py`) is the only code allowed to call
-into two modules' `public_api` within a single operation. Reach for it when the
-caller needs a combined result back, e.g. assembling a `UserWithProducts` composite,
-or validating a user exists before creating a product on their behalf.
+A **Facade** is the only code allowed to call into more than one module's
+`public_api` within a single operation. Reach for it when the caller needs a
+combined result back — e.g. `UserProductFacade` (`app/facades/user_product_facade.py`)
+assembling a `UserWithProducts` composite, or validating a user exists before
+creating a product on their behalf. `OrderFacade`
+(`app/facades/order_facade.py`) is the same pattern one module further: placing
+an order reads from `users`, reads and writes `products` (reserving stock), and
+writes `orders`, all inside one `UnitOfWork` — proof the pattern isn't
+two-module-specific.
 
 Every `public_api.py` method accepts an optional `session` parameter. Called
 without it — the common case — the method opens and commits its own session,
@@ -71,6 +76,22 @@ of failing dangerous (a partial write persisted). See
 `tests/test_facade.py::test_create_product_for_user_rolls_back_when_user_missing`
 for the regression test that pins this behavior down.
 
+### Who publishes the event when a Facade drives the `UnitOfWork`
+
+`UserPublicApi.register_user` publishes `UserRegistered` itself — but only in the
+branch where it opened and committed its own session (`owns=True`; see
+[Domain events](#3-domain-events--fire-and-forget-side-effects) below). When a
+facade passes in an external session, that method's `owns` is `False`, it never
+commits, and so it correctly never publishes either — publishing has to happen
+strictly after a successful commit, and the individual `public_api` call inside
+a `UnitOfWork` doesn't know when (or whether) that commit will happen.
+
+`OrderFacade.place_order` is the concrete case: it drives the `UnitOfWork` and
+owns the commit, so *it* — not `OrderPublicApi.create_order` — publishes
+`OrderPlaced`, once its own `session.commit()` has actually succeeded. If you add
+a facade method that should raise an event, this is the pattern: publish from the
+facade, after its commit, not from the module method it called.
+
 ### Session factory injection
 
 Every `public_api.py` class also accepts an optional `session_factory` in its
@@ -82,8 +103,8 @@ class UserPublicApi:
         self._session_factory = session_factory
 ```
 
-The module singletons (`user_public_api`, `product_public_api`, instantiated at the
-bottom of each `public_api.py`) leave it unset. That means they resolve
+The module singletons (`user_public_api`, `product_public_api`, `order_public_api`
+— instantiated at the bottom of each `public_api.py`) leave it unset. That means they resolve
 `app.shared.database.AsyncSessionFactory` lazily, by name, on every call — which is
 what lets `tests/conftest.py` point the *entire app* at an in-memory SQLite database
 by patching that one module attribute before the app object is even built.
@@ -171,7 +192,9 @@ That's precisely why `Product.created_by_user_id` stays a real, enforced
 `ForeignKey(..., ondelete="CASCADE")` instead of "delete the user, publish
 `UserDeleted`, have `products` subscribe and delete their rows" — see
 [database.md](database.md#the-one-deliberate-cross-module-foreign-key) for that
-tradeoff in full.
+tradeoff in full. `orders` is the contrast: it references `users`/`products` by
+plain id, no FK, because a Facade validates both ids inside the same transaction
+that writes the order — see `app/modules/orders/README.md`.
 
 ## Decision guide
 

@@ -14,9 +14,7 @@ class Settings(BaseSettings):
 
     RATE_LIMIT_DEFAULT: str = "100/minute"
 
-    # Explicit allow-list — `["*"]` combined with allow_credentials=True is rejected
-    # by browsers anyway (the spec forbids a wildcard origin on credentialed
-    # requests) and is an unsafe default even where it's silently accepted.
+    # Explicit allow-list — browsers reject "*" combined with allow_credentials=True anyway.
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     model_config = {"env_file": ".env", "case_sensitive": True}

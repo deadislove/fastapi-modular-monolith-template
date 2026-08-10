@@ -17,8 +17,7 @@ PRODUCT_PAYLOAD = {
 
 
 def _register_payload(username: str) -> dict:
-    """Each test gets its own account — the in-memory test DB persists across
-    tests in a session, so reusing one email/username would 409 on the 2nd use."""
+    """Unique per test — the in-memory DB persists across a session, so reuse would 409."""
     return {"email": f"{username}@example.com", "username": username, "password": "secret123"}
 
 
@@ -77,8 +76,7 @@ async def test_create_product_for_user(client: AsyncClient) -> None:
 
 
 async def test_create_product_for_user_rolls_back_when_user_missing(client: AsyncClient) -> None:
-    """Proves UnitOfWork's default-rollback behavior: the existence check and the
-    product write share one transaction, so a missing user leaves nothing behind."""
+    """UnitOfWork's default rollback: a missing user must leave nothing behind."""
     before = (await product_public_api.get_all_products()).ok()
 
     result = await user_product_facade.create_product_for_user(

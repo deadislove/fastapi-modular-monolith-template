@@ -65,8 +65,7 @@ async def test_unsubscribe_stops_future_events() -> None:
 
 
 async def test_registering_a_user_publishes_user_registered(client: AsyncClient) -> None:
-    """Proves the composition-root wiring in app/main.py, not just EventBus in
-    isolation — registers a real handler on the process-wide event_bus singleton."""
+    """Exercises the real app/main.py wiring, not just EventBus in isolation."""
     received: list[UserRegistered] = []
 
     async def handler(event: UserRegistered) -> None:

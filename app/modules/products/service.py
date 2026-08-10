@@ -1,6 +1,7 @@
 from result import Err, Ok, Result
 
 from app.modules.products.errors import (
+    InsufficientStockError,
     ProductError,
     ProductForbiddenError,
     ProductNotFoundError,
@@ -64,6 +65,18 @@ class ProductService:
         if data.stock is not None:
             product.stock = data.stock
 
+        await self._repo.session.flush()
+        await self._repo.session.refresh(product)
+        return Ok(product)
+
+    async def reserve_stock(self, product_id: int, quantity: int) -> Result[Product, ProductError]:
+        product = await self._repo.get_by_id(product_id)
+        if product is None:
+            return Err(ProductNotFoundError())
+        if product.stock < quantity:
+            return Err(InsufficientStockError())
+
+        product.stock -= quantity
         await self._repo.session.flush()
         await self._repo.session.refresh(product)
         return Ok(product)

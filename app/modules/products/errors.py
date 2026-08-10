@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.shared.errors import DomainError, ForbiddenError, NotFoundError
+from app.shared.errors import ConflictError, DomainError, ForbiddenError, NotFoundError
 
 
 @dataclass(frozen=True)
@@ -15,5 +15,11 @@ class ProductForbiddenError(ForbiddenError):
     code: str = "PRODUCT_FORBIDDEN"
 
 
+@dataclass(frozen=True)
+class InsufficientStockError(ConflictError):
+    message: str = "Not enough stock available"
+    code: str = "INSUFFICIENT_STOCK"
+
+
 # Union type alias — used as the Err side of Result[T, ProductError]
-ProductError = ProductNotFoundError | ProductForbiddenError | DomainError
+ProductError = ProductNotFoundError | ProductForbiddenError | InsufficientStockError | DomainError

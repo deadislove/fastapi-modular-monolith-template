@@ -15,11 +15,8 @@ from app.shared.database import resolve_session
 
 
 class ProductPublicApiProtocol(Protocol):
-    """
-    Structural contract for the Product module's public surface. Facades and other
-    modules should depend on this Protocol rather than the concrete ProductPublicApi
-    class, so they can be tested against fakes without touching the database.
-    """
+    """Structural contract facades depend on instead of the concrete class, so
+    tests can substitute a fake without touching the database."""
 
     async def create_product(
         self, data: ProductCreateRequest, user_id: int, session: AsyncSession | None = None
@@ -53,25 +50,17 @@ class ProductPublicApiProtocol(Protocol):
         self, product_id: int, requesting_user_id: int, session: AsyncSession | None = None
     ) -> Result[None, ProductError]: ...
 
+    async def reserve_stock(
+        self, product_id: int, quantity: int, session: AsyncSession | None = None
+    ) -> Result[Product, ProductError]: ...
+
 
 class ProductPublicApi:
-    """
-    Module public interface — the only sanctioned entry point for external callers.
-
-    Every method accepts an optional `session`: when omitted (the common case), the
-    method opens and commits its own session exactly as before. When a caller passes
-    a session — typically a facade running inside `UnitOfWork` — that caller owns the
-    commit/rollback, which is what allows atomic writes across module boundaries.
-    """
+    """The only sanctioned entry point for external callers. Every method takes
+    an optional `session`; when a caller (typically a facade's UnitOfWork)
+    passes one, that caller owns the commit/rollback."""
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
-        """
-        `session_factory=None` (the default, used by the module singleton below) reads
-        `app.shared.database.AsyncSessionFactory` at call time, which is what lets tests
-        swap the whole app's DB by patching that module attribute. Pass an explicit
-        factory to get a fully isolated instance for unit tests that shouldn't touch
-        any process-wide state.
-        """
         self._session_factory = session_factory
 
     async def create_product(
@@ -129,6 +118,16 @@ class ProductPublicApi:
         async with resolve_session(session, self._session_factory) as (s, owns):
             service = ProductService(ProductRepository(s))
             result = await service.delete(product_id, requesting_user_id)
+            if result.is_ok() and owns:
+                await s.commit()
+            return result
+
+    async def reserve_stock(
+        self, product_id: int, quantity: int, session: AsyncSession | None = None
+    ) -> Result[Product, ProductError]:
+        async with resolve_session(session, self._session_factory) as (s, owns):
+            service = ProductService(ProductRepository(s))
+            result = await service.reserve_stock(product_id, quantity)
             if result.is_ok() and owns:
                 await s.commit()
             return result

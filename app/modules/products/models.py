@@ -6,9 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.database import Base, module_schema
 
-# ForeignKey targets need the schema qualifier too once users' table moves out of
-# the default schema — see modules/products/README.md for why this FK exists at
-# all despite the module-boundary rule.
+# FK target needs the schema qualifier too once users' table moves out of the
+# default schema. See modules/products/README.md for why this FK exists at all.
 _USERS_TABLE = f"{module_schema('users')}.users" if module_schema("users") else "users"
 
 

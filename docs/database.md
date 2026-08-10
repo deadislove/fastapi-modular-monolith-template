@@ -55,8 +55,9 @@ for why "no exception raised" can't be trusted as "safe to commit" here.
 
 Import boundaries (see [architecture.md](architecture.md#enforcing-boundaries)) are
 code-level separation. On PostgreSQL, each module also gets its own database
-**schema** — `users.users`, `products.products` — so the separation is physical,
-not just a convention `import-linter` enforces at commit time.
+**schema** — `users.users`, `products.products`, `orders.orders` — so the
+separation is physical, not just a convention `import-linter` enforces at commit
+time.
 
 ```python
 # app/shared/database.py
@@ -104,19 +105,23 @@ async def create_all_tables() -> None:
 `alembic/env.py` passes `include_schemas=True` to `context.configure(...)`, which is
 required for autogenerate to even *see* tables outside the default schema. But
 autogenerate still only diffs tables — it does **not** emit `CREATE SCHEMA`
-statements for a newly-introduced schema. The checked-in
-`alembic/versions/..._initial_schema.py` adds those by hand:
+statements for a newly-introduced schema. Both checked-in migrations add that line
+by hand: `alembic/versions/..._initial_schema.py` (`users`, `products`) and
+`alembic/versions/..._add_orders.py`, generated later when the `orders` module was
+added:
 
 ```python
 def upgrade() -> None:
-    op.execute('CREATE SCHEMA IF NOT EXISTS users')
-    op.execute('CREATE SCHEMA IF NOT EXISTS products')
-    op.create_table('users', ..., schema='users')
-    op.create_table('products', ..., schema='products')
+    op.execute('CREATE SCHEMA IF NOT EXISTS orders')
+    op.create_table('orders', ..., schema='orders')
 ```
 
 Any future migration that introduces a *new* module's first table needs the same
-one-line addition — autogenerate won't remind you.
+one-line addition — autogenerate won't remind you. The `orders` migration is a
+real example of exactly this: `alembic revision --autogenerate` correctly detected
+only `orders.orders` as new (no FK, since `orders` doesn't take the same shortcut
+`products` does — see below), and the `CREATE SCHEMA` line still had to be added
+by hand same as the first time.
 
 Generate migrations against the actual target database, not whatever
 `DATABASE_URL` happens to default to locally:
@@ -150,6 +155,13 @@ that `products` now has one real, physical dependency on `users`'s schema. See
 `app/modules/products/README.md` for the module-level writeup of the same
 decision.
 
+`orders` deliberately does **not** repeat this: `Order.user_id` and
+`Order.product_id` are plain indexed columns, no FK. Business logic is the
+reason (deleting a product shouldn't delete the historical orders that reference
+it — an order is a receipt, not a cascade target), and referential integrity
+instead comes from `OrderFacade` validating both ids inside the same `UnitOfWork`
+that creates the order. See `app/modules/orders/README.md`.
+
 ### Verifying against real PostgreSQL: what was actually checked
 
 When this was built, the schema-per-module path was verified end-to-end against a
@@ -164,6 +176,16 @@ real PostgreSQL container, not just read through:
 4. A full app-level smoke test — register a user, create a product for them via
    `UserProductFacade`, then delete the user — confirmed the product row was gone
    afterward, proving the cross-schema `ON DELETE CASCADE` actually fires.
+
+The same process repeated when the `orders` module was added: `alembic
+revision --autogenerate` against the same Postgres instance correctly picked up
+only `orders.orders` as new (confirming the no-FK design produces no cross-schema
+constraint), `alembic upgrade head` / `downgrade -1` applied and reverted cleanly,
+and an app-level smoke test placed a real order through `OrderFacade` — stock
+dropped by the ordered quantity, then a second order for more than the remaining
+stock failed with `InsufficientStockError` **and** left both the stock level and
+the order count unchanged, proving the atomic rollback holds across two modules'
+writes (`products`' stock, `orders`' row), not just one.
 
 One environment-specific gotcha surfaced during that verification, worth knowing if
 you hit the same thing: if you also run PostgreSQL natively on your machine (e.g.

@@ -2,6 +2,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.modules.orders.models  # noqa: F401
 import app.modules.products.models  # noqa: F401
 
 # Import models before Base.metadata is used so all tables are registered
@@ -39,13 +40,8 @@ async def setup_test_db():
 
 @pytest_asyncio.fixture(autouse=True)
 def _reset_rate_limiter():
-    """
-    slowapi's Limiter keeps its counters in a process-wide in-memory store, shared
-    by every test in the session regardless of which file or DB row they touch.
-    Without this, tests pass or fail depending on how many requests earlier tests
-    happened to make — exactly the kind of order-dependent flakiness a growing
-    suite runs into. Reset before each test so every test starts its own budget.
-    """
+    """slowapi's counters are process-wide; reset before each test so request
+    volume in one test/file can't trip limits in another."""
     from app.shared.rate_limiter import limiter
 
     limiter.reset()

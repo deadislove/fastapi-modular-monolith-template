@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import app.modules.orders.models  # noqa: F401
 import app.modules.products.models  # noqa: F401
 
 # Import all models so their metadata is registered before autogenerate runs
@@ -27,9 +28,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        # Required for autogenerate to see (and diff) each module's schema —
-        # without this, tables outside the default schema are invisible to it.
-        include_schemas=True,
+        include_schemas=True,  # required for autogenerate to see non-default schemas
     )
     with context.begin_transaction():
         context.run_migrations()

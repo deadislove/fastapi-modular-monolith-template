@@ -8,28 +8,21 @@ from sqlalchemy.schema import CreateSchema
 
 from app.shared.config import settings
 
-# Single engine instance — swap DATABASE_URL in .env to target any supported backend
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
     future=True,
 )
 
-# SQLite has no real schema/namespace concept (ATTACHing extra files to fake one
-# would complicate local dev for little benefit), so schema-per-module is a
-# PostgreSQL-only concern: each module's models opt in via `module_schema(name)`,
-# which resolves to None — no schema — everywhere else. Decided once, from the
-# configured URL, rather than by inspecting the live engine, so model classes (which
-# set their schema at class-definition time, before any connection exists) can use it.
+# Decided once from the URL, not the live engine — models set their schema at
+# class-definition time, before any connection exists.
 IS_POSTGRES = settings.DATABASE_URL.startswith("postgresql")
 
 
 def module_schema(name: str) -> str | None:
-    """Schema name for a module's tables — only meaningful on PostgreSQL. Use this
-    in every module's `models.py` (see app/modules/users/models.py) rather than
-    hardcoding a schema string, so dropping to SQLite for a quick local run doesn't
-    require touching every model."""
+    """Only PostgreSQL has schemas; resolves to None (default namespace) otherwise."""
     return name if IS_POSTGRES else None
+
 
 AsyncSessionFactory = async_sessionmaker(
     bind=engine,
@@ -57,14 +50,8 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def create_all_tables() -> None:
-    """
-    Bootstrap all tables — used in tests and local dev runs (SQLite or Postgres).
-    `Base.metadata.create_all` creates tables but never the schemas that contain
-    them, so on Postgres we create each module's schema first, derived from the
-    tables actually registered rather than a hand-maintained list. Production
-    should still prefer Alembic migrations (which do the same schema creation —
-    see alembic/versions); this just keeps `docker compose up` working standalone.
-    """
+    """Bootstrap all tables for local/test runs. create_all() never creates the
+    schemas that contain tables, so do that first on Postgres."""
     async with engine.begin() as conn:
         if IS_POSTGRES:
             schemas = {table.schema for table in Base.metadata.tables.values() if table.schema}
@@ -78,16 +65,8 @@ async def resolve_session(
     external_session: AsyncSession | None,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> AsyncGenerator[tuple[AsyncSession, bool], None]:
-    """
-    Session resolution shared by every module's public_api.
-
-    Yields (session, owns_transaction). When a caller (typically a facade running
-    inside a UnitOfWork) passes its own session, we reuse it and let that caller
-    control commit/rollback — this is what makes atomic cross-module writes possible.
-    Otherwise we open and own a new session from `session_factory`, falling back to
-    the process-wide `AsyncSessionFactory` (read late, by name, so tests can still
-    swap it by patching this module's attribute) when none is given explicitly.
-    """
+    """Yields (session, owns_transaction). Reuses an external session (from
+    UnitOfWork) when given one; otherwise opens its own."""
     if external_session is not None:
         yield external_session, False
         return
@@ -97,17 +76,11 @@ async def resolve_session(
 
 
 class UnitOfWork:
-    """
-    Transaction boundary for facades that must write to more than one module
-    atomically. Pass the yielded session into each public_api call so every
-    module writes through the same connection.
+    """Shared-session transaction boundary for atomic cross-module writes.
 
-    The caller must explicitly `await session.commit()` once it has confirmed a
-    successful Result — UnitOfWork never commits on your behalf. Because this
-    codebase reports failure via Result.Err rather than raising, "no exception"
-    does not mean "safe to commit"; only rolling back by default (on success,
-    an Err Result, or a raised exception alike) keeps a forgotten commit failing
-    safe instead of persisting a partial cross-module write.
+    Always rolls back on exit unless the caller explicitly commits — failures
+    here are Result.Err, not exceptions, so "no exception raised" doesn't mean
+    "safe to commit".
 
         async with UnitOfWork() as session:
             user = await user_public_api.get_user_by_id(user_id, session=session)
@@ -117,9 +90,6 @@ class UnitOfWork:
             if result.is_ok():
                 await session.commit()
             return result
-
-    Pass `session_factory` to target a different database (e.g. a test engine)
-    without touching the process-wide `AsyncSessionFactory` global.
     """
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:

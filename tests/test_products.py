@@ -146,8 +146,7 @@ async def test_list_my_products_respects_limit(client: AsyncClient) -> None:
 
 
 async def test_list_my_products_offset_skips_rows(client: AsyncClient) -> None:
-    """limit=1 with different offsets must return different rows — proves offset
-    actually skips instead of being silently ignored, and that ordering is stable."""
+    """Different offsets must return different rows, not the same page twice."""
     token = await _register_and_login(client)
     for i in range(3):
         await client.post(

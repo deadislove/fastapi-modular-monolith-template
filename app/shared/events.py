@@ -1,19 +1,7 @@
-"""
-In-process pub/sub for decoupled cross-module side effects.
-
-Use a Facade (see app/facades/) when the caller needs a result back — it calls
-each module's public_api directly and can return errors. Use an event when a
-module just needs to say "this happened" without knowing or caring whether
-anyone reacts: e.g. logging, sending a welcome email, warming a cache. This
-keeps optional side effects out of the core service logic that would
-otherwise have to be threaded through it, and out of the publishing module's
-knowledge of who consumes it.
-
-This bus is generic and must not import from app.modules — concrete event
-types live next to the module that publishes them (e.g.
-app.modules.users.events), and subscribers are wired up at the composition
-root (app/main.py), which is the one place allowed to know about both.
-"""
+"""In-process pub/sub for fire-and-forget side effects (use a Facade instead
+when the caller needs a result back). Generic on purpose: must not import from
+app.modules. Concrete event types live in each module's events.py; subscribers
+are wired up in app/main.py, the one place allowed to know about both."""
 
 import logging
 from collections import defaultdict
@@ -34,11 +22,8 @@ Handler = Callable[[DomainEvent], Awaitable[None]]
 
 
 class EventBus:
-    """
-    In-memory, single-process pub/sub. Handlers run sequentially in subscription
-    order; a handler's exception is logged and swallowed so one broken subscriber
-    can't take down the publisher's request.
-    """
+    """In-memory, single-process pub/sub. A handler's exception is logged and
+    swallowed, not re-raised — an optional side effect can't fail the publisher's request."""
 
     def __init__(self) -> None:
         self._handlers: dict[type[DomainEvent], list[Handler]] = defaultdict(list)

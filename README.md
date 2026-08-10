@@ -22,7 +22,8 @@ app/
 ├── api/v1/
 │   ├── router.py                  # Aggregates all v1 routers
 │   ├── users.py                   # /api/v1/users endpoints
-│   └── products.py                # /api/v1/products endpoints
+│   ├── products.py                # /api/v1/products endpoints
+│   └── orders.py                  # /api/v1/orders endpoints
 ├── modules/
 │   ├── users/                     # User bounded context
 │   │   ├── models.py              # SQLAlchemy User entity
@@ -32,15 +33,24 @@ app/
 │   │   ├── repository.py          # Persistence layer (private)
 │   │   ├── service.py             # Business logic (private)
 │   │   └── public_api.py          # ← Module boundary (only import this externally)
-│   └── products/                  # Product bounded context
+│   ├── products/                  # Product bounded context
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── errors.py
+│   │   ├── repository.py          # (private)
+│   │   ├── service.py             # (private)
+│   │   └── public_api.py          # ← Module boundary
+│   └── orders/                    # Order bounded context — depends on both users and products
 │       ├── models.py
 │       ├── schemas.py
 │       ├── errors.py
+│       ├── events.py
 │       ├── repository.py          # (private)
 │       ├── service.py             # (private)
 │       └── public_api.py          # ← Module boundary
 ├── facades/
-│   └── user_product_facade.py     # Cross-module orchestration (needs a result back)
+│   ├── user_product_facade.py     # Coordinates users + products
+│   └── order_facade.py            # Coordinates users + products + orders (3-module UnitOfWork)
 └── shared/
     ├── config.py                  # Pydantic settings
     ├── database.py                # Async engine, session factory, UnitOfWork
@@ -99,6 +109,9 @@ uvicorn app.main:app --reload
 | GET | `/api/v1/products/{id}` | — | Get product by ID |
 | PATCH | `/api/v1/products/{id}` | ✓ | Update product (owner) |
 | DELETE | `/api/v1/products/{id}` | ✓ | Delete product (owner) |
+| POST | `/api/v1/orders/` | ✓ | Place an order (reserves stock atomically) |
+| GET | `/api/v1/orders/my` | ✓ | List my orders (`limit`, `offset`) |
+| GET | `/api/v1/orders/{id}` | ✓ | Get order by ID (owner only) |
 | GET | `/health` | — | Health check |
 
 List endpoints default to `limit=50` (max `100`) and are ordered by `id` for stable
@@ -169,7 +182,7 @@ Running PostgreSQL natively on the same machine (e.g. via Homebrew)? See the por
 
 - **No direct cross-module DB joins** — cross-module data access goes through `public_api.py` interfaces
 - **Result pattern** — all module public APIs return `Result[T, DomainError]`, never raise
-- **Facades** — `UserProductFacade` is the only place that orchestrates multiple modules
+- **Facades** — the only code allowed to orchestrate more than one module in a single operation (`UserProductFacade`, `OrderFacade`)
 - **Absolute imports** — always `from app.modules.users.public_api import ...`
 
 These four rules are the summary; the reasoning, the enforcement mechanism, and the
@@ -180,7 +193,9 @@ patterns for satisfying them in practice are documented in **[`docs/`](docs/READ
 | [`docs/architecture.md`](docs/architecture.md) | Module boundaries, layering, public/private surface, `import-linter` enforcement |
 | [`docs/cross-module-communication.md`](docs/cross-module-communication.md) | Direct calls vs. Facade+`UnitOfWork` vs. domain events — and when to use which |
 | [`docs/database.md`](docs/database.md) | Session lifecycle, `UnitOfWork`, schema-per-module, migrations |
+| [`docs/adding-a-module.md`](docs/adding-a-module.md) | Checklist for adding a new module, written from actually adding `orders` |
 
 Each module also documents its own contract next to its code:
 [`app/modules/users/README.md`](app/modules/users/README.md),
-[`app/modules/products/README.md`](app/modules/products/README.md).
+[`app/modules/products/README.md`](app/modules/products/README.md),
+[`app/modules/orders/README.md`](app/modules/orders/README.md).

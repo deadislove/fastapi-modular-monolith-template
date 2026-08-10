@@ -5,14 +5,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.modules.orders.models  # noqa: F401
 import app.modules.products.models  # noqa: F401
 
 # Import models so SQLAlchemy metadata is populated before create_all_tables runs
 import app.modules.users.models  # noqa: F401
 from app.api.v1.router import api_v1_router
 
-# main.py is the composition root: the one place allowed to know about both a
-# module's published event types and its cross-cutting subscribers.
+# Composition root: knows both a module's event types and its subscribers.
+from app.modules.orders.events import OrderPlaced
 from app.modules.users.events import UserRegistered
 from app.shared.config import settings
 from app.shared.database import create_all_tables
@@ -27,11 +28,17 @@ async def _log_user_registered(event: UserRegistered) -> None:
     logger.info("User registered: id=%s email=%s", event.user_id, event.email)
 
 
+async def _log_order_placed(event: OrderPlaced) -> None:
+    logger.info(
+        "Order placed: id=%s user_id=%s product_id=%s qty=%s",
+        event.order_id, event.user_id, event.product_id, event.quantity,
+    )
+
+
 def register_event_subscribers() -> None:
-    """Wire cross-cutting subscribers to domain events published by modules — add
-    new ones here (e.g. send a welcome email) without touching the publishing
-    module. See app/shared/events.py for when to reach for an event vs a Facade."""
+    """Add new subscribers here without touching the publishing module."""
     event_bus.subscribe(UserRegistered, _log_user_registered)
+    event_bus.subscribe(OrderPlaced, _log_order_placed)
 
 
 register_event_subscribers()
