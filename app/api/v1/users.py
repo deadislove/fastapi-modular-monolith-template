@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -61,7 +63,9 @@ async def register(request: Request, body: UserRegisterRequest) -> UserResponse:
     summary="Authenticate and receive a JWT",
 )
 @limiter.limit("20/minute")
-async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()) -> TokenResponse:
+async def login(
+    request: Request, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+) -> TokenResponse:
     # OAuth2PasswordRequestForm uses `username` field — we treat it as email
     result = await user_public_api.authenticate_user(form_data.username, form_data.password)
     if result.is_err():

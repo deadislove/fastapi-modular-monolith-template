@@ -1,14 +1,10 @@
-from typing import Generic, TypeVar
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.database import Base
 
-ModelT = TypeVar("ModelT", bound=Base)
 
-
-class BaseRepository(Generic[ModelT]):
+class BaseRepository[ModelT: Base]:
     """Generic async repository — concrete repos inherit and extend as needed."""
 
     def __init__(self, model: type[ModelT], session: AsyncSession) -> None:

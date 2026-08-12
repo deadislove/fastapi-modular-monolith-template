@@ -49,5 +49,5 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         if user_id_str is None:
             raise credentials_exception
         return int(user_id_str)
-    except (jwt.PyJWTError, ValueError):
-        raise credentials_exception
+    except (jwt.PyJWTError, ValueError) as err:
+        raise credentials_exception from err
