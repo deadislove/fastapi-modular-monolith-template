@@ -172,7 +172,14 @@ it depends on: **[`docs/database.md`](docs/database.md)**.
 docker compose up -d --build
 # App: http://localhost:8000/docs
 # PostgreSQL: localhost:5432
+docker compose ps   # both services should report (healthy)
 ```
+
+Both services define a `healthcheck`: `db` via `pg_isready`, `app` via
+[`/health/ready`](#api-endpoints) — no `curl`/`wget` in the slim image, so the
+Dockerfile's `HEALTHCHECK` and this healthcheck both call it with Python's stdlib
+`urllib` instead. `app`'s `depends_on: db: condition: service_healthy` means it
+won't even start until Postgres is actually ready, not just running.
 
 Running PostgreSQL natively on the same machine (e.g. via Homebrew)? See the port
 5432 conflict note in **[`docs/database.md`](docs/database.md#verifying-against-real-postgresql-what-was-actually-checked)**
