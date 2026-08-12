@@ -28,8 +28,11 @@ become its own service, the seams are already where they'd need to be.
 │   ├── errors.py                                             │
 │   ├── models.py       (entity types public_api returns —    │
 │   │                    read-only outside the module)        │
+│   ├── subscribers.py  (private — self-registered reactions  │
+│   │                    to this module's own events)          │
 │   ├── service.py      (private)                             │
-│   └── repository.py   (private)                             │
+│   ├── repository.py   (private)                             │
+│   └── tests/          (this module's own test suite)         │
 └───────────────────────┬───────────────────────────────────┘
                          │ depends on
 ┌───────────────────────▼───────────────────────────────────┐
@@ -55,12 +58,21 @@ A module's public surface — what code outside the module is allowed to import 
 - **`errors.py`** — the module's domain error types (the `Err` side of its `Result`s).
 - **`models.py`** — the SQLAlchemy entity type(s) `public_api.py` returns. These
   cross the boundary as **read-only value objects**: callers may read fields off
-  them, but only the owning module's `service.py`/`repository.py` may write to the
-  database through them.
+  them, but only the owning module's `service.py`/`repository.py` may write to —
+  or *query* — the database through them. A `Product` returned by
+  `ProductPublicApi` may be type-hinted and read from `app.facades`; a different
+  module's `service.py`/`repository.py` importing `products.models` to build its
+  own `select(Product)...` instead of calling `ProductPublicApi` is the
+  cross-module coupling `.importlinter`'s fifth contract exists to catch — see
+  [Enforcing boundaries](#enforcing-boundaries).
 
-Everything else — **`service.py`** (business logic) and **`repository.py`**
-(persistence/query construction) — is a private implementation detail. Nothing
-outside the module, not even another module's `public_api.py`, may import them.
+Everything else — **`service.py`** (business logic), **`repository.py`**
+(persistence/query construction), and **`subscribers.py`** (this module's own
+reactions to its own events, see
+[cross-module-communication.md](cross-module-communication.md#where-subscriptions-are-wired-up))
+— is a private implementation detail. Nothing outside the module, not even
+another module's `public_api.py`, may import them; `subscribers.py` has one
+narrow exception, `app/main.py`, the composition root.
 
 Each module also has its own README with the exact list of what it publishes and
 depends on: [`app/modules/users/README.md`](../app/modules/users/README.md),
@@ -125,25 +137,43 @@ live in `.importlinter` at the repo root:
 lint-imports
 ```
 
-Four contracts run:
+Six contracts run:
 
 1. **Layering** (`api → facades → modules → shared`) — a `type = layers` contract.
    A lower layer can never import from a higher one.
 2. **`users` internals are private**, 3. **`products` internals are private**,
    4. **`orders` internals are private** — one `type = forbidden` contract per
    module, blocking any import of that module's `repository.py`/`service.py`
-   from outside it. Every other module's name is listed in `source_modules` (so
-   `orders` importing `users.repository` is caught exactly like `app.api` doing
-   the same).
+   (and `subscribers.py`, if it has one) from outside it. Every other module's
+   name is listed in `source_modules` (so `orders` importing `users.repository`
+   is caught exactly like `app.api` doing the same).
+5. **No cross-module model queries** — `models.py` *is* part of a module's
+   public surface (see above), so contracts 2–4 deliberately don't block
+   `app.facades`/`app.main` from importing it. What this fifth contract blocks
+   instead is a different module's `service.py`/`repository.py` importing it —
+   the shape that would let, say, `orders`' repository build a query directly
+   against `products`' table instead of going through `ProductPublicApi`. Its
+   `source_modules` are every module's `service.py`/`repository.py`, and its
+   `forbidden_modules` are every module's `models.py`.
+6. **Facades don't import each other** — a `type = independence` contract over
+   every file in `app/facades/`. A Facade is meant to be the *only* code
+   allowed to call more than one module's `public_api` in one operation (see
+   [cross-module-communication.md](cross-module-communication.md#2-facade--unitofwork--when-you-need-an-atomic-result));
+   nothing stops one facade calling another instead of calling `public_api`
+   directly, which would grow an undocumented second layer of orchestration on
+   top of the first. `independence` simply asserts none of the listed modules
+   import each other, in either direction.
 
-One subtlety in contracts 2–4: `forbidden` contracts check reachability
-*transitively*, so without `ignore_imports` in `.importlinter`, the legitimate
-`public_api.py → service.py → repository.py` chain *inside* the module would itself
-trip the contract (since `public_api.py` is externally reachable and it imports
-`service.py`). The `ignore_imports` entries exclude exactly those two internal
-edges, so what's left flagged is a genuine outside-in shortcut. Adding a new
-module means adding both a new `forbidden` contract for it, and its name to the
-other contracts' `source_modules` — see
+One subtlety in contracts 2–5: `forbidden` contracts check reachability
+*transitively*, so without `ignore_imports` in `.importlinter`, legitimate internal
+chains would trip them too — the `public_api.py → service.py → repository.py`
+chain *inside* a module (contracts 2–4), and every module's `service.py`/
+`repository.py` importing its *own*, required `models.py` (contract 5). The
+`ignore_imports` entries exclude exactly those edges, so what's left flagged is
+a genuine outside-in shortcut. Adding a new module means adding a new `forbidden`
+contract for it, its name to the other modules' `source_modules`, and its
+`service.py`/`repository.py` → `models.py` edges to contract 5; adding a new
+facade means adding its module path to contract 6's `modules` list — see
 [`docs/adding-a-module.md`](adding-a-module.md).
 
 This also runs as part of the test suite (`tests/test_architecture.py`), so a

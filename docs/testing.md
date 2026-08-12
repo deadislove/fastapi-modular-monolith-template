@@ -12,25 +12,41 @@ service container — the same schema-per-module path described in
 [database.md](database.md#schema-per-module-isolation-postgresql), checked on
 every push instead of only when someone remembers to.
 
-## Test suite map
+## Where tests live
 
-| File | Level | Covers |
-|------|-------|--------|
-| `test_users.py` / `test_products.py` | HTTP (via `httpx.AsyncClient` + `ASGITransport`) | Per-module request/response behavior, one module at a time |
-| `test_facade.py` | HTTP setup, facade called directly | Cross-module composition (`get_user_with_products`), and that `UnitOfWork` actually rolls back when a write should be rejected |
-| `test_orders.py` | HTTP | The three-module `OrderFacade` flow: placing an order, insufficient stock, ownership checks, that a failed stock reservation leaves both `products`' stock and `orders`' row count unchanged, and that the `BackgroundTasks` fulfillment notification is actually scheduled (via `unittest.mock.patch`, not log-scraping — see below) |
-| `test_events.py` | Unit (`EventBus` in isolation) + integration | `EventBus` semantics (dispatch, no-subscriber no-op, one handler's failure doesn't block others, unsubscribe), plus a real HTTP registration proving the `main.py` subscriber wiring actually fires |
-| `test_public_api_di.py` | Unit | Constructing a `UserPublicApi` with an explicit `session_factory`, fully isolated from the process-wide `AsyncSessionFactory` global |
-| `test_architecture.py` | Static analysis, run as a test | Executes `.importlinter`'s contracts via `importlinter.cli.lint_imports()` and asserts success |
-| `test_error_envelope.py` | HTTP | Every error shape (404 domain error, 422 validation, 401 auth, 429 rate limit) uses the same `{"error": {"code", "message"}}` envelope |
-| `test_health.py` | HTTP | `/health` is always 200; `/health/ready` reflects real DB reachability (including a simulated-outage case) |
+Single-module tests live next to the module they test, not in `tests/` —
+`app/modules/<name>/tests/`, mirroring the module's own package structure.
+That's deliberate: if `orders` ever became its own service, its tests would
+move with it without anyone having to go hunting through a flat `tests/`
+directory to find which files belonged to it. `tests/` at the repo root is
+reserved for what genuinely can't live inside one module: cross-module
+integration (`test_facade.py`), cross-cutting infrastructure (`test_events.py`,
+`test_error_envelope.py`, `test_health.py`), and the architecture contracts
+themselves (`test_architecture.py`).
 
-`tests/conftest.py` wires an in-memory SQLite database (`sqlite+aiosqlite:///:memory:`)
-shared across the whole test session, and patches `app.shared.database.AsyncSessionFactory`
+`pytest.ini`'s `testpaths = tests app/modules` tells pytest to collect from
+both. A single root-level `conftest.py` (not `tests/conftest.py` — pytest only
+honors `pytest_plugins` declarations in the *rootdir* conftest, so the shared
+fixtures have to live where every test, module-owned or not, can see them)
+wires an in-memory SQLite database (`sqlite+aiosqlite:///:memory:`) shared
+across the whole test session, and patches `app.shared.database.AsyncSessionFactory`
 to point at it *before* the app's module-level singletons (`user_public_api`,
 `product_public_api`, ...) are constructed — see
 [cross-module-communication.md](cross-module-communication.md#session-factory-injection)
 for why that ordering, and that specific mechanism, is what makes it work.
+
+## Test suite map
+
+| File | Level | Covers |
+|------|-------|--------|
+| `app/modules/users/tests/test_users.py` / `app/modules/products/tests/test_products.py` | HTTP (via `httpx.AsyncClient` + `ASGITransport`) | Per-module request/response behavior, one module at a time |
+| `app/modules/users/tests/test_public_api_di.py` | Unit | Constructing a `UserPublicApi` with an explicit `session_factory`, fully isolated from the process-wide `AsyncSessionFactory` global |
+| `app/modules/orders/tests/test_orders.py` | HTTP | The three-module `OrderFacade` flow: placing an order, insufficient stock, ownership checks, that a failed stock reservation leaves both `products`' stock and `orders`' row count unchanged, and that the `BackgroundTasks` fulfillment notification is actually scheduled (via `unittest.mock.patch`, not log-scraping — see below) |
+| `tests/test_facade.py` | HTTP setup, facade called directly | Cross-module composition (`get_user_with_products`), and that `UnitOfWork` actually rolls back when a write should be rejected |
+| `tests/test_events.py` | Unit (`EventBus` in isolation) + integration | `EventBus` semantics (dispatch, no-subscriber no-op, one handler's failure doesn't block others, unsubscribe), plus a real HTTP registration proving `users`' self-registered subscriber (`app/modules/users/subscribers.py`) actually fires through the real `app.main` wiring |
+| `tests/test_architecture.py` | Static analysis, run as a test | Executes `.importlinter`'s contracts via `importlinter.cli.lint_imports()` and asserts success |
+| `tests/test_error_envelope.py` | HTTP | Every error shape (404 domain error, 422 validation, 401 auth, 429 rate limit) uses the same `{"error": {"code", "message"}}` envelope |
+| `tests/test_health.py` | HTTP | `/health` is always 200; `/health/ready` reflects real DB reachability (including a simulated-outage case) |
 
 ## Why `test_create_product_for_user_rolls_back_when_user_missing` exists
 

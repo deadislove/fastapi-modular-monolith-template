@@ -31,24 +31,29 @@ app/
 │   │   ├── schemas.py             # Pydantic request/response schemas
 │   │   ├── errors.py              # Domain error types
 │   │   ├── events.py              # Domain events this module publishes
+│   │   ├── subscribers.py         # Self-registered reactions to its own events (private)
 │   │   ├── repository.py          # Persistence layer (private)
 │   │   ├── service.py             # Business logic (private)
-│   │   └── public_api.py          # ← Module boundary (only import this externally)
+│   │   ├── public_api.py          # ← Module boundary (only import this externally)
+│   │   └── tests/                 # This module's own test suite
 │   ├── products/                  # Product bounded context
 │   │   ├── models.py
 │   │   ├── schemas.py
 │   │   ├── errors.py
 │   │   ├── repository.py          # (private)
 │   │   ├── service.py             # (private)
-│   │   └── public_api.py          # ← Module boundary
+│   │   ├── public_api.py          # ← Module boundary
+│   │   └── tests/
 │   └── orders/                    # Order bounded context — depends on both users and products
 │       ├── models.py
 │       ├── schemas.py
 │       ├── errors.py
 │       ├── events.py
+│       ├── subscribers.py         # (private)
 │       ├── repository.py          # (private)
 │       ├── service.py             # (private)
-│       └── public_api.py          # ← Module boundary
+│       ├── public_api.py          # ← Module boundary
+│       └── tests/
 ├── facades/
 │   ├── user_product_facade.py     # Coordinates users + products
 │   └── order_facade.py            # Coordinates users + products + orders (3-module UnitOfWork)
@@ -62,7 +67,8 @@ app/
     ├── exception_handler.py       # Global 500 handler
     └── rate_limiter.py            # slowapi setup
 alembic/                           # DB migrations
-tests/                             # pytest-asyncio test suite
+tests/                             # Cross-module integration + architecture contract tests
+conftest.py                        # Shared pytest fixtures (repo-wide, incl. app/modules/*/tests/)
 ```
 
 📖 **For the architecture reasoning behind this structure — not just the file

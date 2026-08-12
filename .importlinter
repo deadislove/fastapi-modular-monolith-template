@@ -14,9 +14,11 @@ layers =
 containers =
     app
 
-# repository.py/service.py are private. ignore_imports excludes the legitimate
-# public_api -> service -> repository chain, which `forbidden` would otherwise
-# flag too since it checks reachability transitively.
+# repository.py/service.py/subscribers.py are private. ignore_imports excludes
+# the legitimate public_api -> service -> repository chain, which `forbidden`
+# would otherwise flag too since it checks reachability transitively.
+# subscribers.py is only ever called from app.main (the composition root),
+# which isn't in source_modules below, so that call site is unaffected.
 [importlinter:contract:users-internals]
 name = users module internals are private
 type = forbidden
@@ -28,6 +30,7 @@ source_modules =
 forbidden_modules =
     app.modules.users.repository
     app.modules.users.service
+    app.modules.users.subscribers
 ignore_imports =
     app.modules.users.public_api -> app.modules.users.service
     app.modules.users.public_api -> app.modules.users.repository
@@ -58,6 +61,49 @@ source_modules =
 forbidden_modules =
     app.modules.orders.repository
     app.modules.orders.service
+    app.modules.orders.subscribers
 ignore_imports =
     app.modules.orders.public_api -> app.modules.orders.service
     app.modules.orders.public_api -> app.modules.orders.repository
+
+# models.py IS part of the public surface (public_api.py returns these as
+# read-only value objects — see architecture.md) — app.facades and app.main
+# are meant to import them. What this contract blocks is a *different*
+# module's service.py/repository.py reaching into it to build its own query
+# against a table it doesn't own, instead of going through that module's
+# public_api. ignore_imports excludes every module's service.py/repository.py
+# importing its *own* models.py, which is required, not a violation.
+[importlinter:contract:no-cross-module-model-queries]
+name = service/repository layers must not import another module's models
+type = forbidden
+source_modules =
+    app.modules.users.service
+    app.modules.users.repository
+    app.modules.products.service
+    app.modules.products.repository
+    app.modules.orders.service
+    app.modules.orders.repository
+forbidden_modules =
+    app.modules.users.models
+    app.modules.products.models
+    app.modules.orders.models
+ignore_imports =
+    app.modules.users.service -> app.modules.users.models
+    app.modules.users.repository -> app.modules.users.models
+    app.modules.products.service -> app.modules.products.models
+    app.modules.products.repository -> app.modules.products.models
+    app.modules.orders.service -> app.modules.orders.models
+    app.modules.orders.repository -> app.modules.orders.models
+
+# A Facade is the only code allowed to call more than one module's public_api
+# within a single operation (see cross-module-communication.md) — but nothing
+# stopped a facade from calling *another facade* instead of calling public_api
+# directly, which would grow a second, undocumented layer of orchestration on
+# top of the first. `independence` checks that none of the listed modules
+# import each other, directly or transitively, in either direction.
+[importlinter:contract:facade-independence]
+name = facades do not import each other
+type = independence
+modules =
+    app.facades.user_product_facade
+    app.facades.order_facade

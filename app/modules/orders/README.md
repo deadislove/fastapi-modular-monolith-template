@@ -17,6 +17,9 @@ modules — it's the only module that depends on **both** `users` and `products`
 | `errors.py` | `OrderNotFoundError` (under the `OrderError` union) |
 | `models.py` | `Order` — the entity type `public_api.py` returns. Treat it as a read-only value object outside this module. |
 
+Everything else — including `subscribers.py` — is private and blocked by
+`.importlinter` at the root, same as `repository.py`/`service.py`.
+
 ## Published events
 
 | Event | When | Defined in |
@@ -24,7 +27,11 @@ modules — it's the only module that depends on **both** `users` and `products`
 | `OrderPlaced` | After an order and its stock reservation both commit | `events.py` |
 
 Published by `OrderFacade.place_order` (not `OrderPublicApi.create_order`) —
-see [Dependencies](#dependencies-on-other-modules) for why.
+see [Dependencies](#dependencies-on-other-modules) for why. This module
+self-registers its own reaction to `OrderPlaced` in `subscribers.py`; only
+`app/main.py` (the composition root) may call it, and a subscription from
+another module would still have to be wired there instead. See
+[`docs/cross-module-communication.md`](../../../docs/cross-module-communication.md#where-subscriptions-are-wired-up).
 
 ## Dependencies on other modules
 

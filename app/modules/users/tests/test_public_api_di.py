@@ -2,7 +2,7 @@ import pytest
 
 from app.modules.users.public_api import UserPublicApi
 from app.modules.users.schemas import UserRegisterRequest
-from tests.conftest import TestSessionFactory
+from conftest import TestSessionFactory
 
 pytestmark = pytest.mark.asyncio
 

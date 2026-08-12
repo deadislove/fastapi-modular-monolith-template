@@ -11,8 +11,8 @@ Bounded context for identity: credentials, authentication, and account records.
 ## Public surface
 
 External callers (other modules, facades, `app/api/`) may only import from these
-four files. Everything else (`repository.py`, `service.py`) is private and blocked
-by `.importlinter` at the root.
+four files. Everything else (`repository.py`, `service.py`, `subscribers.py`) is
+private and blocked by `.importlinter` at the root.
 
 | File | Contents |
 |------|----------|
@@ -27,8 +27,11 @@ by `.importlinter` at the root.
 |-------|------|------------|
 | `UserRegistered` | After a registration transaction commits | `events.py` |
 
-Subscribers are wired at the composition root (`app/main.py`), not here — this
-module never knows who (if anyone) is listening. See
+This module self-registers its own reactions to `UserRegistered` in
+`subscribers.py` (private, like `service.py`/`repository.py` — only
+`app/main.py` may call it). It still never knows whether anyone *else* is
+listening: a subscription from another module would have to be wired at the
+composition root (`app/main.py`), not here. See
 [`docs/cross-module-communication.md`](../../../docs/cross-module-communication.md#3-domain-events--fire-and-forget-side-effects).
 
 ## Dependencies on other modules

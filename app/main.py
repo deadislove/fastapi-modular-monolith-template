@@ -14,9 +14,11 @@ import app.modules.products.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 from app.api.v1.router import api_v1_router
 
-# Composition root: knows both a module's event types and its subscribers.
-from app.modules.orders.events import OrderPlaced
-from app.modules.users.events import UserRegistered
+# Composition root: aggregates each module's self-registered event subscribers.
+# A subscription to *another* module's event (not the publisher's own) still
+# belongs here, since only this file may import another module's events.py.
+from app.modules.orders.subscribers import register_subscribers as register_orders_subscribers
+from app.modules.users.subscribers import register_subscribers as register_users_subscribers
 from app.shared.config import settings
 from app.shared.database import create_all_tables, resolve_session
 from app.shared.events import event_bus
@@ -30,21 +32,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger(__name__)
 
 
-async def _log_user_registered(event: UserRegistered) -> None:
-    logger.info("User registered: id=%s email=%s", event.user_id, event.email)
-
-
-async def _log_order_placed(event: OrderPlaced) -> None:
-    logger.info(
-        "Order placed: id=%s user_id=%s product_id=%s qty=%s",
-        event.order_id, event.user_id, event.product_id, event.quantity,
-    )
-
-
 def register_event_subscribers() -> None:
-    """Add new subscribers here without touching the publishing module."""
-    event_bus.subscribe(UserRegistered, _log_user_registered)
-    event_bus.subscribe(OrderPlaced, _log_order_placed)
+    """Each module registers its own reactions to its own events. Adding a
+    new module's subscribers means one import + one call here — not a new
+    handler function and event-type import in this file."""
+    register_users_subscribers(event_bus)
+    register_orders_subscribers(event_bus)
 
 
 register_event_subscribers()

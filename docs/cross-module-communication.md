@@ -151,23 +151,42 @@ user that isn't durably saved yet.
 
 ### Where subscriptions are wired up
 
-Subscribers are registered at the **composition root**, `app/main.py` — the one
-place in the codebase allowed to import both a module's event types and the
-cross-cutting handlers that react to them. Modules never import each other's
-`events.py` directly; that would just be the forbidden cross-module coupling with
-extra steps.
+A module reacting to **its own** event self-registers via a `subscribers.py`
+next to its `events.py`:
 
 ```python
-# app/main.py
+# app/modules/users/subscribers.py
 async def _log_user_registered(event: UserRegistered) -> None:
     logger.info("User registered: id=%s email=%s", event.user_id, event.email)
 
-def register_event_subscribers() -> None:
-    event_bus.subscribe(UserRegistered, _log_user_registered)
+def register_subscribers(bus: EventBus) -> None:
+    bus.subscribe(UserRegistered, _log_user_registered)
 ```
 
-Add a new side effect (e.g. "send a welcome email") by writing a handler and
-subscribing it in `main.py`. The `users` module doesn't change.
+`subscribers.py` is private to its module — `.importlinter` blocks any import of
+it from outside, same as `service.py`/`repository.py` — with one exception: the
+**composition root**, `app/main.py`, calls every module's `register_subscribers`
+in one place:
+
+```python
+# app/main.py
+def register_event_subscribers() -> None:
+    register_users_subscribers(event_bus)
+    register_orders_subscribers(event_bus)
+```
+
+Add a new same-module side effect (e.g. "send a welcome email" when `users`
+publishes `UserRegistered`) by adding a handler to that module's
+`subscribers.py`. Nothing outside the module changes.
+
+A subscription to **another** module's event is different: modules still never
+import each other's `events.py` directly — that's the forbidden cross-module
+coupling `import-linter` blocks, self-registration or not. That kind of
+subscription still belongs in `app/main.py`, the one place allowed to import
+both a module's event types and the cross-cutting handler that reacts to them.
+Self-registration only removes the boilerplate for the common case (a module
+logging/reacting to its own event); it doesn't change who's allowed to react to
+someone else's.
 
 ### Why handler exceptions are swallowed — and what that rules out
 

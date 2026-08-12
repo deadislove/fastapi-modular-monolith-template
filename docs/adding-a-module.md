@@ -13,10 +13,16 @@ every step below.
 | `schemas.py` | Pydantic request/response DTOs. |
 | `errors.py` | Domain error dataclasses + a `<Name>Error` union type (`SomeError \| DomainError`). |
 | `events.py` | Optional. Only if the module needs to notify other code without returning a result — see [cross-module-communication.md](cross-module-communication.md#3-domain-events--fire-and-forget-side-effects). |
+| `subscribers.py` | Optional, pairs with `events.py`. A `register_subscribers(bus)` function holding this module's own reactions to its own events (e.g. logging). **Private** — never imported outside the module except by `app/main.py`. See [cross-module-communication.md](cross-module-communication.md#where-subscriptions-are-wired-up). |
 | `repository.py` | Persistence. Extend `BaseRepository[Model]`, add query methods `get_all`/`get_by_id` don't cover. **Private** — never imported outside the module. |
 | `service.py` | Business logic, returns `Result[T, <Name>Error]`. **Private**. |
 | `public_api.py` | The module's only public surface. See step 2. |
 | `README.md` | Owned table, public surface, published events, dependencies on other modules — copy the structure of `app/modules/orders/README.md`. |
+| `tests/` | This module's own tests — see step 8. |
+
+If you added `subscribers.py`, call its `register_subscribers(event_bus)` from
+`register_event_subscribers()` in `app/main.py` — that's the one place allowed
+to know every module's subscriber-registration function exists.
 
 ## 2. `public_api.py` shape
 
@@ -44,21 +50,34 @@ exists:
 
 - `app/main.py`
 - `alembic/env.py`
-- `tests/conftest.py`
+- `conftest.py` (repo root)
 
-## 4. `.importlinter` — two kinds of changes
+## 4. `.importlinter` — three kinds of changes
 
-- Add a new `forbidden` contract for the module, blocking its `repository.py`
-  and `service.py` from outside import, with `source_modules` listing every
-  *other* module plus `app.api` and `app.facades`, and `ignore_imports`
-  excluding its own `public_api → service` / `public_api → repository` edges
-  (required — `forbidden` contracts check reachability transitively, so without
-  this the module's own internal chain trips its own contract). Copy the
-  `orders-internals` contract and rename.
+- Add a new `forbidden` contract for the module, blocking its `repository.py`,
+  `service.py`, and (if present) `subscribers.py` from outside import, with
+  `source_modules` listing every *other* module plus `app.api` and
+  `app.facades`, and `ignore_imports` excluding its own
+  `public_api → service` / `public_api → repository` edges (required —
+  `forbidden` contracts check reachability transitively, so without this the
+  module's own internal chain trips its own contract). Copy the
+  `orders-internals` contract and rename. `subscribers.py` doesn't need an
+  `ignore_imports` entry — nothing inside the module imports it, only
+  `app/main.py` calls it, and `app.main` is never in `source_modules`.
 - Add the new module's name to every *existing* module's `forbidden` contract
   `source_modules` list — otherwise the new module could import an older
   module's internals and nothing would catch it. Easy to forget; this is the
   step that's silent until you specifically test for it.
+- Add the new module's `service.py` and `repository.py` to
+  `no-cross-module-model-queries`'s `source_modules`, its `models.py` to that
+  same contract's `forbidden_modules`, and its own
+  `service.py → models.py` / `repository.py → models.py` edges to that
+  contract's `ignore_imports` (required — same transitive-reachability reason
+  as above; without it, the module's own repository importing its own model
+  would trip its own contract). See
+  [architecture.md](architecture.md#enforcing-boundaries) for why this is a
+  separate contract from the one above rather than folded into it —
+  `models.py` is public, unlike `service.py`/`repository.py`.
 
 Run `lint-imports` after — it'll tell you immediately if a contract is missing
 or misconfigured.
@@ -69,7 +88,11 @@ If the new module only needs its own data, skip this — routers can call its
 `public_api` directly. If placing/creating a `<name>` needs to check or write
 another module's data too (like `orders` needs `users` to exist and `products`
 to have stock), that coordination goes in a **new facade**
-(`app/facades/<name>_facade.py`), never in the module's own `service.py`. See
+(`app/facades/<name>_facade.py`), never in the module's own `service.py`, and
+never by calling into an *existing* facade — a facade only calls modules'
+`public_api`s, never another facade (that's `.importlinter`'s
+`facade-independence` contract; add the new file's module path to its
+`modules` list). See
 [cross-module-communication.md](cross-module-communication.md#2-facade--unitofwork--when-you-need-an-atomic-result)
 for the full pattern, including the `UnitOfWork` shape for atomic multi-module
 writes.
@@ -108,11 +131,20 @@ throwaway `docker run postgres:16-alpine ...`), then `alembic upgrade head` /
 
 ## 8. Tests
 
-At minimum, mirror `tests/test_orders.py`'s shape: one HTTP test per
-success/error path the router exposes, plus one test that specifically proves
-any `UnitOfWork` atomicity claim the module's facade makes (e.g. "a rejected
-write leaves nothing behind" — assert row counts/field values are unchanged
-after the failed call, not just that it returned an error). See
+Tests for the new module live in `app/modules/<name>/tests/` (with an
+`__init__.py`, same as every other module subpackage), not in `tests/` —
+`pytest.ini`'s `testpaths = tests app/modules` already collects from there, and
+the root-level `conftest.py`'s fixtures (`client`, `setup_test_db`) are visible
+everywhere, so nothing else needs wiring. Reserve `tests/` at the repo root for
+things that genuinely span modules or are cross-cutting infrastructure — see
+[testing.md](testing.md#where-tests-live).
+
+At minimum, mirror `app/modules/orders/tests/test_orders.py`'s shape: one HTTP
+test per success/error path the router exposes, plus one test that
+specifically proves any `UnitOfWork` atomicity claim the module's facade makes
+(e.g. "a rejected write leaves nothing behind" — assert row counts/field
+values are unchanged after the failed call, not just that it returned an
+error). See
 [testing.md](testing.md#why-test_place_order_rolls_back_stock_on_insufficient_stock-exists)
 for why that class of test matters more than it looks.
 

@@ -62,9 +62,3 @@ async def test_get_me(client: AsyncClient) -> None:
 async def test_get_me_unauthenticated(client: AsyncClient) -> None:
     response = await client.get("/api/v1/users/me")
     assert response.status_code == 401
-
-
-async def test_health_check(client: AsyncClient) -> None:
-    response = await client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
