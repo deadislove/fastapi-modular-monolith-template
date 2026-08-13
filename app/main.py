@@ -15,8 +15,6 @@ import app.modules.users.models  # noqa: F401
 from app.api.v1.router import api_v1_router
 
 # Composition root: aggregates each module's self-registered event subscribers.
-# A subscription to *another* module's event (not the publisher's own) still
-# belongs here, since only this file may import another module's events.py.
 from app.modules.orders.subscribers import register_subscribers as register_orders_subscribers
 from app.modules.users.subscribers import register_subscribers as register_users_subscribers
 from app.shared.config import settings
@@ -33,9 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def register_event_subscribers() -> None:
-    """Each module registers its own reactions to its own events. Adding a
-    new module's subscribers means one import + one call here — not a new
-    handler function and event-type import in this file."""
+    """Each module self-registers reactions to its own events."""
     register_users_subscribers(event_bus)
     register_orders_subscribers(event_bus)
 

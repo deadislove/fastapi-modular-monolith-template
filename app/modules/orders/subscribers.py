@@ -14,7 +14,5 @@ async def _log_order_placed(event: OrderPlaced) -> None:
 
 
 def register_subscribers(bus: EventBus) -> None:
-    """Self-registration for this module's reactions to its own events. A
-    subscription to *another* module's event still belongs in app/main.py —
-    only the composition root may import another module's events.py."""
+    """Only this module's own events — cross-module subscriptions stay in app/main.py."""
     bus.subscribe(OrderPlaced, _log_order_placed)
