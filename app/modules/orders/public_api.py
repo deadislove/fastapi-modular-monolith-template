@@ -63,7 +63,7 @@ class OrderPublicApi:
             result = await service.create(user_id, product_id, quantity, unit_price)
             if result.is_ok() and owns:
                 await s.commit()
-                order = result.ok()
+                order = result.unwrap()
                 await event_bus.publish(
                     OrderPlaced(
                         order_id=order.id,

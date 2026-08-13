@@ -49,8 +49,8 @@ def _map_user_error(err: DomainError) -> HTTPException:
 async def register(request: Request, body: UserRegisterRequest) -> UserResponse:
     result = await user_public_api.register_user(body)
     if result.is_err():
-        raise _map_user_error(result.err())
-    return UserResponse.model_validate(result.ok())
+        raise _map_user_error(result.unwrap_err())
+    return UserResponse.model_validate(result.unwrap())
 
 
 @router.post(
@@ -69,8 +69,8 @@ async def login(
     # OAuth2PasswordRequestForm uses `username` field — we treat it as email
     result = await user_public_api.authenticate_user(form_data.username, form_data.password)
     if result.is_err():
-        raise _map_user_error(result.err())
-    return TokenResponse(access_token=result.ok())
+        raise _map_user_error(result.unwrap_err())
+    return TokenResponse(access_token=result.unwrap())
 
 
 @router.get(
@@ -86,8 +86,8 @@ async def login(
 async def get_me(current_user_id: int = Depends(get_current_user_id)) -> UserResponse:
     result = await user_public_api.get_user_by_id(current_user_id)
     if result.is_err():
-        raise _map_user_error(result.err())
-    return UserResponse.model_validate(result.ok())
+        raise _map_user_error(result.unwrap_err())
+    return UserResponse.model_validate(result.unwrap())
 
 
 @router.get(
@@ -106,8 +106,8 @@ async def list_users(
 ) -> list[UserResponse]:
     result = await user_public_api.get_all_users(limit=limit, offset=offset)
     if result.is_err():
-        raise _map_user_error(result.err())
-    return [UserResponse.model_validate(u) for u in result.ok()]
+        raise _map_user_error(result.unwrap_err())
+    return [UserResponse.model_validate(u) for u in result.unwrap()]
 
 
 @router.get(
@@ -123,8 +123,8 @@ async def list_users(
 async def get_user(user_id: int, _: int = Depends(get_current_user_id)) -> UserResponse:
     result = await user_public_api.get_user_by_id(user_id)
     if result.is_err():
-        raise _map_user_error(result.err())
-    return UserResponse.model_validate(result.ok())
+        raise _map_user_error(result.unwrap_err())
+    return UserResponse.model_validate(result.unwrap())
 
 
 @router.patch(
@@ -145,8 +145,8 @@ async def update_user(
 ) -> UserResponse:
     result = await user_public_api.update_user(user_id, body)
     if result.is_err():
-        raise _map_user_error(result.err())
-    return UserResponse.model_validate(result.ok())
+        raise _map_user_error(result.unwrap_err())
+    return UserResponse.model_validate(result.unwrap())
 
 
 @router.delete(
@@ -162,4 +162,4 @@ async def update_user(
 async def delete_user(user_id: int, _: int = Depends(get_current_user_id)) -> None:
     result = await user_public_api.delete_user(user_id)
     if result.is_err():
-        raise _map_user_error(result.err())
+        raise _map_user_error(result.unwrap_err())

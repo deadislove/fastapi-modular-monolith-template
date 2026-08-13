@@ -18,4 +18,4 @@ async def test_user_public_api_accepts_an_explicit_session_factory() -> None:
     )
 
     assert result.is_ok()
-    assert result.ok().email == "isolated@example.com"
+    assert result.unwrap().email == "isolated@example.com"

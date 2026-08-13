@@ -50,7 +50,7 @@ async def create_product_for_user(self, user_id: int, ...) -> Result[Product, ..
     async with UnitOfWork() as session:
         user_result = await self._user_api.get_user_by_id(user_id, session=session)
         if user_result.is_err():
-            return Err(user_result.err())
+            return Err(user_result.unwrap_err())
 
         result = await self._product_api.create_product(data, user_id, session=session)
         if result.is_ok():
@@ -239,8 +239,8 @@ async def place_order(
 ) -> OrderResponse:
     result = await order_facade.place_order(current_user_id, body.product_id, body.quantity)
     if result.is_err():
-        raise _map_order_error(result.err())
-    order = result.ok()
+        raise _map_order_error(result.unwrap_err())
+    order = result.unwrap()
     background_tasks.add_task(_notify_fulfillment, order.id, order.product_id, order.quantity)
     return OrderResponse.model_validate(order)
 ```

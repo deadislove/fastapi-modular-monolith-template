@@ -17,3 +17,6 @@ pytest-asyncio
 httpx
 ruff
 import-linter
+mypy
+types-passlib
+pre-commit

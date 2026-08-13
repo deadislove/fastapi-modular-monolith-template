@@ -36,25 +36,25 @@ class OrderFacade:
         async with UnitOfWork() as session:
             user_result = await self._user_api.get_user_by_id(user_id, session=session)
             if user_result.is_err():
-                return Err(user_result.err())  # type: ignore[arg-type]
+                return Err(user_result.unwrap_err())
 
             product_result = await self._product_api.get_product_by_id(product_id, session=session)
             if product_result.is_err():
-                return Err(product_result.err())  # type: ignore[arg-type]
-            unit_price = product_result.ok().price  # type: ignore[union-attr]
+                return Err(product_result.unwrap_err())
+            unit_price = product_result.unwrap().price
 
             reserve_result = await self._product_api.reserve_stock(
                 product_id, quantity, session=session
             )
             if reserve_result.is_err():
-                return Err(reserve_result.err())  # type: ignore[arg-type]
+                return Err(reserve_result.unwrap_err())
 
             order_result = await self._order_api.create_order(
                 user_id, product_id, quantity, unit_price, session=session
             )
             if order_result.is_ok():
                 await session.commit()
-                order = order_result.ok()
+                order = order_result.unwrap()
                 # create_order() doesn't publish here: with an external session,
                 # it doesn't own the commit and can't know it's safe to. The
                 # facade does, once its own commit above has actually succeeded.

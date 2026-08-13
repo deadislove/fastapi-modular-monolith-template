@@ -3,14 +3,29 @@
 ```bash
 pytest              # test suite
 ruff check .         # lint
+mypy                 # type check (config: mypy.ini, files = app)
 lint-imports         # architecture boundary contracts (also runs inside pytest)
 ```
 
-`.github/workflows/ci.yml` runs exactly these three on every push/PR, plus a
+`.github/workflows/ci.yml` runs exactly these four on every push/PR, plus a
 second job that applies both Alembic migrations against a real PostgreSQL
 service container — the same schema-per-module path described in
 [database.md](database.md#schema-per-module-isolation-postgresql), checked on
 every push instead of only when someone remembers to.
+
+### Why every `Result`-returning call site uses `.unwrap()`/`.unwrap_err()`, not `.ok()`/`.err()`
+
+The `result` library types `Ok.ok()`/`Err.err()` per-subclass rather than via
+a `TypeGuard` on the shared `.is_ok()`/`.is_err()` instance methods, so mypy
+can't narrow `Result[T, E]` after the `if result.is_err(): ...` checks this
+codebase uses everywhere — `.ok()`'s inferred type stays `T | None` even on a
+branch that's already proven not-`None` at runtime. `.unwrap()`/`.unwrap_err()`
+don't have that gap (`Ok.unwrap() -> T`, `Err.unwrap() -> NoReturn`, and a
+union with `NoReturn` collapses to just `T`), and as a bonus they fail loudly
+with `UnwrapError` instead of silently returning `None` if a future edit ever
+removes the guard check by mistake. See
+[architecture.md](architecture.md#result-pattern-over-exceptions) for the
+Result pattern itself.
 
 ## Where tests live
 
@@ -79,7 +94,7 @@ doesn't depend on the `lint-imports` console script being on `PATH`.
 
 ## A gotcha this suite already ran into: the rate limiter is process-wide
 
-`tests/conftest.py` has an `autouse` fixture, `_reset_rate_limiter`:
+`conftest.py` has an `autouse` fixture, `_reset_rate_limiter`:
 
 ```python
 @pytest_asyncio.fixture(autouse=True)
@@ -104,6 +119,21 @@ test, so each test gets its own budget regardless of execution order or how larg
 the suite grows. If you add a new test that hits a rate-limited endpoint many times
 in a loop, you still don't need to think about this — the reset happens
 automatically before your test runs.
+
+The same process-wide, in-memory store has a production consequence worth
+knowing before you deploy this beyond a single process: it isn't shared across
+workers. Run `uvicorn`/`gunicorn` with multiple workers, or multiple container
+replicas behind a load balancer, and each process keeps its own counters —
+`/api/v1/users/register`'s `10/minute` becomes `10 × (worker count)/minute` in
+aggregate, since a client's requests can land on any worker and each worker
+only knows about the requests *it* has seen. This template's `Limiter`
+(`app/shared/rate_limiter.py`) uses `slowapi`'s default in-memory storage,
+which is the right choice for a single-process deployment (and for tests) but
+not a horizontally-scaled one. If you scale past one process, swap in
+`slowapi`'s Redis-backed storage (`slowapi.util` supports a `storage_uri`) so
+every worker shares one counter — that's an infrastructure change (a Redis
+instance to run and a `REDIS_URL` to configure), not a code change to
+`rate_limiter.py`'s shape.
 
 ## Another gotcha: shared test data across a file
 

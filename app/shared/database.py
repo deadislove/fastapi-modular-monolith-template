@@ -85,7 +85,7 @@ class UnitOfWork:
         async with UnitOfWork() as session:
             user = await user_public_api.get_user_by_id(user_id, session=session)
             if user.is_err():
-                return Err(user.err())
+                return Err(user.unwrap_err())
             result = await product_public_api.create_product(data, user_id, session=session)
             if result.is_ok():
                 await session.commit()

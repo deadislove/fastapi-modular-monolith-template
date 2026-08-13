@@ -21,6 +21,9 @@ jobs:
       - name: Lint
         run: ruff check .
 
+      - name: Type check
+        run: mypy
+
       - name: Architecture boundaries
         run: lint-imports
 

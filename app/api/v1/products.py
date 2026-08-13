@@ -41,8 +41,8 @@ async def create_product(
 ) -> ProductResponse:
     result = await product_public_api.create_product(body, current_user_id)
     if result.is_err():
-        raise _map_product_error(result.err())
-    return ProductResponse.model_validate(result.ok())
+        raise _map_product_error(result.unwrap_err())
+    return ProductResponse.model_validate(result.unwrap())
 
 
 @router.get(
@@ -59,8 +59,8 @@ async def list_products(
 ) -> list[ProductResponse]:
     result = await product_public_api.get_all_products(limit=limit, offset=offset)
     if result.is_err():
-        raise _map_product_error(result.err())
-    return [ProductResponse.model_validate(p) for p in result.ok()]
+        raise _map_product_error(result.unwrap_err())
+    return [ProductResponse.model_validate(p) for p in result.unwrap()]
 
 
 @router.get(
@@ -79,8 +79,8 @@ async def list_my_products(
 ) -> list[ProductResponse]:
     result = await product_public_api.get_products_by_user(current_user_id, limit=limit, offset=offset)
     if result.is_err():
-        raise _map_product_error(result.err())
-    return [ProductResponse.model_validate(p) for p in result.ok()]
+        raise _map_product_error(result.unwrap_err())
+    return [ProductResponse.model_validate(p) for p in result.unwrap()]
 
 
 @router.get(
@@ -95,8 +95,8 @@ async def list_my_products(
 async def get_product(product_id: int) -> ProductResponse:
     result = await product_public_api.get_product_by_id(product_id)
     if result.is_err():
-        raise _map_product_error(result.err())
-    return ProductResponse.model_validate(result.ok())
+        raise _map_product_error(result.unwrap_err())
+    return ProductResponse.model_validate(result.unwrap())
 
 
 @router.patch(
@@ -117,8 +117,8 @@ async def update_product(
 ) -> ProductResponse:
     result = await product_public_api.update_product(product_id, body, current_user_id)
     if result.is_err():
-        raise _map_product_error(result.err())
-    return ProductResponse.model_validate(result.ok())
+        raise _map_product_error(result.unwrap_err())
+    return ProductResponse.model_validate(result.unwrap())
 
 
 @router.delete(
@@ -138,4 +138,4 @@ async def delete_product(
 ) -> None:
     result = await product_public_api.delete_product(product_id, current_user_id)
     if result.is_err():
-        raise _map_product_error(result.err())
+        raise _map_product_error(result.unwrap_err())

@@ -40,13 +40,13 @@ class UserProductFacade:
         """Fetch a user and all their products — two module calls, zero cross-module joins."""
         user_result = await self._user_api.get_user_by_id(user_id)
         if user_result.is_err():
-            return Err(user_result.err())  # type: ignore[arg-type]
+            return Err(user_result.unwrap_err())
 
         products_result = await self._product_api.get_products_by_user(user_id)
         if products_result.is_err():
-            return Err(products_result.err())  # type: ignore[arg-type]
+            return Err(products_result.unwrap_err())
 
-        return Ok(UserWithProducts(user=user_result.ok(), products=products_result.ok()))  # type: ignore[arg-type]
+        return Ok(UserWithProducts(user=user_result.unwrap(), products=products_result.unwrap()))
 
     async def create_product_for_user(
         self,
@@ -61,7 +61,7 @@ class UserProductFacade:
         async with UnitOfWork() as session:
             user_result = await self._user_api.get_user_by_id(user_id, session=session)
             if user_result.is_err():
-                return Err(user_result.err())  # type: ignore[arg-type]
+                return Err(user_result.unwrap_err())
 
             create_data = ProductCreateRequest(
                 name=name,

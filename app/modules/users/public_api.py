@@ -61,7 +61,7 @@ class UserPublicApi:
             result = await service.register(data)
             if result.is_ok() and owns:
                 await s.commit()
-                user = result.ok()
+                user = result.unwrap()
                 await event_bus.publish(UserRegistered(user_id=user.id, email=user.email))
             return result
 

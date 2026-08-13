@@ -1,3 +1,4 @@
+import importlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -7,11 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-import app.modules.orders.models  # noqa: F401
-import app.modules.products.models  # noqa: F401
-
-# Import models so SQLAlchemy metadata is populated before create_all_tables runs
-import app.modules.users.models  # noqa: F401
 from app.api.v1.router import api_v1_router
 
 # Composition root: aggregates each module's self-registered event subscribers.
@@ -28,6 +24,11 @@ from app.shared.rate_limiter import register_rate_limiter
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 logger = logging.getLogger(__name__)
+
+# Populates SQLAlchemy metadata before create_all_tables runs.
+importlib.import_module("app.modules.orders.models")
+importlib.import_module("app.modules.products.models")
+importlib.import_module("app.modules.users.models")
 
 
 def register_event_subscribers() -> None:

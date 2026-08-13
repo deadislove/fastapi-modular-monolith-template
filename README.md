@@ -6,7 +6,7 @@ High-cohesion, low-coupling **Modular Monolith** built with:
 - **SQLAlchemy v2 Async** (SQLite for dev, PostgreSQL for prod — schema-per-module on Postgres)
 - **JWT Auth** (OAuth2 Bearer via PyJWT + passlib/bcrypt)
 - **Result Pattern** (`result` library) for cross-module communication
-- **Rate Limiting** (slowapi)
+- **Rate Limiting** (slowapi — in-memory by default, single-process only; see [testing.md](docs/testing.md#a-gotcha-this-suite-already-ran-into-the-rate-limiter-is-process-wide) before scaling to multiple workers/replicas)
 - **API Versioning** (`/api/v1/`)
 - **Unified error responses** — `{"error": {"code", "message"}}` for every 4xx/5xx, domain or otherwise
 - **Liveness/readiness health checks** — `/health` vs `/health/ready` (DB ping)
@@ -133,24 +133,36 @@ paging — see `BaseRepository.get_all`.
 pytest
 ```
 
-Five test files cover per-module HTTP behavior, cross-module facade composition,
-the event bus, isolated-instance DI, and architecture boundaries (`.importlinter`
-run as a test). Full breakdown, plus the two test-suite gotchas already hit and
-fixed (a process-wide rate limiter, and shared test data within a file):
+Module-owned tests (`app/modules/*/tests/`) cover per-module HTTP behavior;
+`tests/` covers cross-module facade composition, the event bus, isolated-instance
+DI, config validation, and architecture boundaries (`.importlinter` run as a
+test). Full breakdown, plus the test-suite gotchas already hit and fixed
+(a process-wide rate limiter, and shared test data within a file):
 **[`docs/testing.md`](docs/testing.md)**.
 
 ---
 
-## Linting & Architecture Boundary Check
+## Linting, Type Checking & Architecture Boundary Check
 
 ```bash
 ruff check . --fix
+mypy
 lint-imports
 ```
 
 `lint-imports` fails the build if a module's internals (`repository.py`/`service.py`)
 are imported from outside the module, or if the `api → facades → modules → shared`
 layering is violated. How the contracts work: **[`docs/architecture.md`](docs/architecture.md#enforcing-boundaries)**.
+
+All three run in CI (`.github/workflows/ci.yml`) on every push/PR. To catch the
+same issues locally before you push, install the pre-commit hooks once per clone:
+
+```bash
+pre-commit install
+```
+
+After that, `ruff`/`mypy`/`lint-imports` run automatically on `git commit`
+against the files you changed (`.pre-commit-config.yaml`).
 
 ---
 

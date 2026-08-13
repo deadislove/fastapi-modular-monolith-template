@@ -2,11 +2,6 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-import app.modules.orders.models  # noqa: F401
-import app.modules.products.models  # noqa: F401
-
-# Import models before Base.metadata is used so all tables are registered
-import app.modules.users.models  # noqa: F401
 import app.shared.database as db_module
 from app.main import app
 from app.shared.database import Base
@@ -25,7 +20,7 @@ TestSessionFactory = async_sessionmaker(
 
 # Patch the module-level factory immediately at import time so all singletons
 # (user_public_api, product_public_api) pick up the test engine from the start.
-db_module.AsyncSessionFactory = TestSessionFactory  # type: ignore[assignment]
+db_module.AsyncSessionFactory = TestSessionFactory
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
