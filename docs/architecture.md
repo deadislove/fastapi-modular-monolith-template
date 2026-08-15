@@ -120,9 +120,13 @@ rather than its concrete `*PublicApi` class. Two reasons:
    separate from the implementation.
 2. It lets a facade test substitute a fake implementation of a module's public API
    without touching the database or monkeypatching a session factory — useful for
-   fast, dependency-free unit tests of orchestration logic (this template doesn't
-   currently have such a fake-based test, since `tests/test_facade.py` exercises
-   the real modules end-to-end over HTTP, but the seam is there when you need it).
+   fast, dependency-free unit tests of orchestration logic. `tests/test_facade.py`
+   exercises the real modules end-to-end over HTTP; `tests/test_facade_fakes.py`
+   is the fake-based counterpart, covering `UserProductFacade.get_user_with_products`
+   — the one facade method with no `UnitOfWork`, so the only one a fake can drive
+   without also needing a real database session. Methods that open a `UnitOfWork`
+   (`create_product_for_user`, `OrderFacade.place_order`) still need `test_facade.py`'s
+   HTTP-level coverage for that reason.
 
 ## Enforcing boundaries
 

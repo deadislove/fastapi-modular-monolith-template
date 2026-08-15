@@ -50,9 +50,6 @@ htmlcov/
 # import-linter
 .import_linter_cache/
 
-# Alembic
-alembic/versions/*.py
-
 # Docker
 .dockerignore
 

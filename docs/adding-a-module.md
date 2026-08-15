@@ -112,8 +112,15 @@ writes.
 
 ## 7. Migration
 
+Create the module's own migration directory first — `alembic/versions/<name>/`
+— and add it to `version_locations` in `alembic.ini` (copy the `orders` entry).
+Then generate into it explicitly with `--version-path`, since autogenerate
+otherwise falls back to the flat root directory:
+
 ```bash
-DATABASE_URL=postgresql+asyncpg://... alembic revision --autogenerate -m "add <name>"
+mkdir -p alembic/versions/<name>
+DATABASE_URL=postgresql+asyncpg://... alembic revision --autogenerate -m "add <name>" \
+    --version-path alembic/versions/<name>
 ```
 
 Then, by hand, in the generated file's `upgrade()`:
@@ -121,12 +128,13 @@ Then, by hand, in the generated file's `upgrade()`:
 autogenerate never emits this. Mirror it in `downgrade()`:
 `op.execute('DROP SCHEMA IF EXISTS <name>')` after the table drop. See
 [database.md's Migrations section](database.md#migrations) — this exact step is
-demonstrated by `alembic/versions/..._add_orders.py`.
+demonstrated by `alembic/versions/orders/8b1c06fb2131_add_orders.py`.
 
 Verify the migration against a real PostgreSQL instance before trusting it —
 autogenerating/applying against SQLite won't exercise the schema path at all
-(`module_schema()` resolves to `None` there). `docker compose up -d db` (or a
-throwaway `docker run postgres:16-alpine ...`), then `alembic upgrade head` /
+(`module_schema()` resolves to `None` there; SQLite can't run these migrations
+at all, since `CREATE SCHEMA` isn't valid SQLite syntax). `docker compose up -d db`
+(or a throwaway `docker run postgres:16-alpine ...`), then `alembic upgrade head` /
 `alembic downgrade -1` against it.
 
 ## 8. Tests

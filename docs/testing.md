@@ -58,10 +58,12 @@ for why that ordering, and that specific mechanism, is what makes it work.
 | `app/modules/users/tests/test_public_api_di.py` | Unit | Constructing a `UserPublicApi` with an explicit `session_factory`, fully isolated from the process-wide `AsyncSessionFactory` global |
 | `app/modules/orders/tests/test_orders.py` | HTTP | The three-module `OrderFacade` flow: placing an order, insufficient stock, ownership checks, that a failed stock reservation leaves both `products`' stock and `orders`' row count unchanged, and that the `BackgroundTasks` fulfillment notification is actually scheduled (via `unittest.mock.patch`, not log-scraping — see below) |
 | `tests/test_facade.py` | HTTP setup, facade called directly | Cross-module composition (`get_user_with_products`), and that `UnitOfWork` actually rolls back when a write should be rejected |
+| `tests/test_facade_fakes.py` | Unit (fakes, no DB) | `UserProductFacade.get_user_with_products`'s orchestration logic in isolation — including that a failed user lookup short-circuits before the product API is ever called — via hand-written fakes of `UserPublicApiProtocol`/`ProductPublicApiProtocol`. Only method covered this way: the one facade method with no `UnitOfWork` (see [architecture.md](architecture.md#protocol-based-module-contracts)) |
 | `tests/test_events.py` | Unit (`EventBus` in isolation) + integration | `EventBus` semantics (dispatch, no-subscriber no-op, one handler's failure doesn't block others, unsubscribe), plus a real HTTP registration proving `users`' self-registered subscriber (`app/modules/users/subscribers.py`) actually fires through the real `app.main` wiring |
 | `tests/test_architecture.py` | Static analysis, run as a test | Executes `.importlinter`'s contracts via `importlinter.cli.lint_imports()` and asserts success |
 | `tests/test_error_envelope.py` | HTTP | Every error shape (404 domain error, 422 validation, 401 auth, 429 rate limit) uses the same `{"error": {"code", "message"}}` envelope |
 | `tests/test_health.py` | HTTP | `/health` is always 200; `/health/ready` reflects real DB reachability (including a simulated-outage case) |
+| `tests/test_config.py` | Unit | `Settings` refuses to construct with `APP_ENV=production` and the default `JWT_SECRET_KEY` |
 
 ## Why `test_create_product_for_user_rolls_back_when_user_missing` exists
 

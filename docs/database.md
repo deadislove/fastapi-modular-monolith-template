@@ -106,9 +106,9 @@ async def create_all_tables() -> None:
 required for autogenerate to even *see* tables outside the default schema. But
 autogenerate still only diffs tables — it does **not** emit `CREATE SCHEMA`
 statements for a newly-introduced schema. Both checked-in migrations add that line
-by hand: `alembic/versions/..._initial_schema.py` (`users`, `products`) and
-`alembic/versions/..._add_orders.py`, generated later when the `orders` module was
-added:
+by hand: `alembic/versions/111c01eef9d1_initial_schema.py` (`users`, `products`) and
+`alembic/versions/orders/8b1c06fb2131_add_orders.py`, generated later when the
+`orders` module was added:
 
 ```python
 def upgrade() -> None:
@@ -123,18 +123,66 @@ only `orders.orders` as new (no FK, since `orders` doesn't take the same shortcu
 `products` does — see below), and the `CREATE SCHEMA` line still had to be added
 by hand same as the first time.
 
-Generate migrations against the actual target database, not whatever
-`DATABASE_URL` happens to default to locally:
+#### Per-module migration directories
 
-```bash
-DATABASE_URL=postgresql+asyncpg://... alembic revision --autogenerate -m "message"
-alembic upgrade head
+`alembic/versions/` (flat, root) holds `111c01eef9d1_initial_schema.py` — history
+that predates the per-module convention, bundling `users` and `products`' original
+tables into one revision. It's left exactly where it is, unmoved and unsplit:
+rewriting it into two revisions would change revision IDs already recorded in any
+real database's `alembic_version` table, breaking `alembic upgrade`/`downgrade` for
+every existing deployment for a purely cosmetic gain.
+
+Every module's migrations *since* get their own directory instead —
+`alembic/versions/users/`, `alembic/versions/products/`, `alembic/versions/orders/`
+— configured via `alembic.ini`'s `version_locations`:
+
+```ini
+path_separator = newline
+version_locations =
+    %(here)s/alembic/versions
+    %(here)s/alembic/versions/users
+    %(here)s/alembic/versions/products
+    %(here)s/alembic/versions/orders
 ```
 
-Autogenerating against SQLite won't show any schema at all, since `module_schema()`
-resolves to `None` for that dialect — that's correct, not a bug, but it means
-"generate once, run everywhere" doesn't apply here the way it might in a
-single-schema project.
+`8b1c06fb2131_add_orders.py` was moved into `alembic/versions/orders/` as part of
+this split — a pure file relocation, not a revision-ID change (Alembic links
+revisions by the `revision`/`down_revision` strings inside each file, not by path,
+so moving a file across `version_locations` doesn't affect any already-applied
+migration's tracking).
+
+One easy way to lose the split: `path_separator` (not the deprecated
+`version_path_separator`) must be `newline`, matching the one-location-per-line
+format above. Set it to `os` (or leave the old `version_path_separator = os` from
+before this split) and Alembic silently splits `version_locations` on
+`os.pathsep` (`:` on Linux/macOS) instead — since none of these paths contain a
+`:`, the whole multi-line value collapses into one bogus, nonexistent directory,
+and Alembic finds *zero* revisions without raising an error. `alembic heads`
+returning nothing is the tell.
+
+Target a specific module's directory with `--version-path` when generating a new
+migration — autogenerate still diffs the *whole* schema, `--version-path` only
+controls where the resulting file is written:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://... alembic revision --autogenerate -m "message" \
+    --version-path alembic/versions/products
+```
+
+Leaving off `--version-path` also still works (Alembic falls back to the first
+entry in `version_locations`, i.e. the flat root directory) — it just won't sort
+the new file into a module folder, so pass it explicitly for anything that isn't
+a genuinely cross-module change.
+
+Generate migrations against the actual target database, not whatever
+`DATABASE_URL` happens to default to locally — the command above already shows
+the pattern. Autogenerating against SQLite won't show any schema at all, since
+`module_schema()` resolves to `None` for that dialect — that's correct, not a
+bug, but it means "generate once, run everywhere" doesn't apply here the way it
+might in a single-schema project. (SQLite can't run `alembic upgrade head` here
+at all, for the same reason: the checked-in migrations execute a literal
+`CREATE SCHEMA`, which is PostgreSQL-only syntax — always verify migrations
+against real PostgreSQL, never SQLite; see below.)
 
 ### The one deliberate cross-module foreign key
 
@@ -195,3 +243,18 @@ published port silently loses to it for `localhost` connections — you'll see
 you're actually talking to the native instance, not the container. Either stop the
 native instance or remap the port (`"5433:5432"` in `docker-compose.yml`, with a
 matching `DATABASE_URL`).
+
+The per-module `version_locations` split (above) was verified the same way, against
+a fresh real PostgreSQL container: `alembic heads`/`alembic history` correctly
+resolved the full revision graph across all four configured directories;
+`alembic upgrade head` created all three schemas and tables identically to the
+pre-split layout, and `alembic downgrade base` cleanly reverted all of them;
+`alembic_version` after `upgrade head` still read `8b1c06fb2131` — the same
+revision ID as before the split, confirming the file move doesn't perturb a
+database that already has migrations applied. `alembic revision --autogenerate
+--version-path alembic/versions/products` (a temporary, reverted-after-verifying
+`sku` column added to `Product`) correctly wrote the new file into
+`alembic/versions/products/`, detected only that one column as new, and both
+`alembic upgrade head`/`downgrade -1` applied and reverted it cleanly — proving
+the per-module story actually works going forward, not just that the directories
+exist.
