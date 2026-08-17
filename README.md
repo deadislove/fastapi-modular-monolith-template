@@ -6,7 +6,7 @@ High-cohesion, low-coupling **Modular Monolith** built with:
 - **SQLAlchemy v2 Async** (SQLite for dev, PostgreSQL for prod — schema-per-module on Postgres)
 - **JWT Auth** (OAuth2 Bearer via PyJWT + passlib/bcrypt)
 - **Result Pattern** (`result` library) for cross-module communication
-- **Rate Limiting** (slowapi — in-memory by default, single-process only; see [testing.md](docs/testing.md#a-gotcha-this-suite-already-ran-into-the-rate-limiter-is-process-wide) before scaling to multiple workers/replicas)
+- **Rate Limiting** (slowapi — in-memory by default, single-process only; see [quality-and-tooling.md](docs/quality-and-tooling.md#the-rate-limiter-doesnt-survive-more-than-one-process) before scaling to multiple workers/replicas)
 - **API Versioning** (`/api/v1/`)
 - **Unified error responses** — `{"error": {"code", "message"}}` for every 4xx/5xx, domain or otherwise
 - **Liveness/readiness health checks** — `/health` vs `/health/ready` (DB ping)
@@ -163,6 +163,9 @@ pre-commit install
 
 After that, `ruff`/`mypy`/`lint-imports` run automatically on `git commit`
 against the files you changed (`.pre-commit-config.yaml`).
+
+Why each tool is configured the way it is (mypy's `Result`-narrowing story, the
+pre-commit/CI parity design, the CI pipeline's two jobs): **[`docs/quality-and-tooling.md`](docs/quality-and-tooling.md)**.
 
 ---
 
