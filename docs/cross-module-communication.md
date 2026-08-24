@@ -161,23 +161,24 @@ async def _log_user_registered(event: UserRegistered) -> None:
 
 def register_subscribers(bus: EventBus) -> None:
     bus.subscribe(UserRegistered, _log_user_registered)
+
+module_registry.register_subscribers(register_subscribers)
 ```
 
 `subscribers.py` is private to its module — `.importlinter` blocks any import of
 it from outside, same as `service.py`/`repository.py` — with one exception: the
-**composition root**, `app/main.py`, calls every module's `register_subscribers`
-in one place:
-
-```python
-# app/main.py
-def register_event_subscribers() -> None:
-    register_users_subscribers(event_bus)
-    register_orders_subscribers(event_bus)
-```
+**composition root**, `app/main.py`, imports every module's `subscribers.py`
+(via `discover_modules()`, see
+[architecture.md](architecture.md#module-registry-contracts-must-be-registered-before-they-can-be-used)),
+which is what triggers the `module_registry.register_subscribers(...)` call
+above. `app/main.py` never has to know a given module's subscriber function by
+name — it just calls `module_registry.wire_event_subscribers(event_bus)` once,
+after every module has been discovered, and every registered `register_subscribers`
+runs.
 
 Add a new same-module side effect (e.g. "send a welcome email" when `users`
 publishes `UserRegistered`) by adding a handler to that module's
-`subscribers.py`. Nothing outside the module changes.
+`subscribers.py`. Nothing outside the module changes — not even `app/main.py`.
 
 A subscription to **another** module's event is different: modules still never
 import each other's `events.py` directly — that's the forbidden cross-module

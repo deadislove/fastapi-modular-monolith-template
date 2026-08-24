@@ -128,6 +128,64 @@ rather than its concrete `*PublicApi` class. Two reasons:
    (`create_product_for_user`, `OrderFacade.place_order`) still need `test_facade.py`'s
    HTTP-level coverage for that reason.
 
+## Module registry: contracts must be registered before they can be used
+
+Depending on a Protocol type (above) makes the *shape* of a dependency
+explicit. It doesn't, by itself, stop a facade from just `import`ing the
+concrete singleton anyway — nothing enforced that a module's contract had
+actually been made available before something else assumed it was.
+`app/shared/registry.py`'s `ModuleRegistry` closes that gap:
+
+```python
+class ModuleRegistry:
+    def register_contract(self, protocol: type[T], implementation: T) -> None: ...
+    def resolve(self, protocol: type[T]) -> T: ...  # raises LookupError, never returns None
+```
+
+Each module's `public_api.py` registers its own singleton against its own
+Protocol at the bottom of the file — `UserPublicApi()` and
+`module_registry.register_contract(UserPublicApiProtocol, user_public_api)` are
+one unit, not two separate steps someone could forget half of. Facades no
+longer `import user_public_api` directly; they do
+`module_registry.resolve(UserPublicApiProtocol)`. `resolve()` on a contract
+nothing has registered raises `LookupError` immediately — a module that's
+missing its registration is a startup failure, not a silent `None` that
+surfaces as a confusing `AttributeError` three calls later.
+
+`register_subscribers` follows the same shape: `subscribers.py` calls
+`module_registry.register_subscribers(register_subscribers)` at its own
+import time instead of exposing a function `app/main.py` has to know to call
+— see [cross-module-communication.md](cross-module-communication.md#where-subscriptions-are-wired-up).
+
+### Who actually imports each module — `app/main.py`'s `discover_modules()`
+
+Registration only happens if a module's `public_api.py`/`subscribers.py` gets
+imported at all. Something has to import every module, and per the layering
+rule, it can't be `app/shared/registry.py` — **shared never imports from
+modules** (see [The shape of the system](#the-shape-of-the-system)), and a
+registry that scanned `app/modules/*/` itself would violate that on the spot.
+So the scan lives at the one place already exempt from the layering
+contract: `app/main.py`, the composition root.
+
+`discover_modules()` uses `pkgutil.iter_modules` to walk `app/modules/`'s
+immediate subpackages and `importlib.import_module` each one's `models.py`
+(populates SQLAlchemy metadata), `public_api.py` (registers its contract),
+and `subscribers.py` if present (registers its event subscribers). Adding a
+new module means adding a new directory under `app/modules/` with those
+files — `app/main.py` doesn't change. `app/api/v1/router.py`'s
+`discover_routers()` does the same for router files: every sibling
+`app/api/v1/<name>.py` is imported and its `router` attribute mounted,
+so a new module's endpoints appear without an edit to `router.py` either. See
+[`docs/adding-a-module.md`](adding-a-module.md) for the updated checklist.
+
+Both scans use `importlib.import_module` with a dynamically built string, not
+a literal `import` statement — `lint-imports`'s static analysis can't see
+into that, so these two edges are invisible to `.importlinter`'s dependency
+graph. That's not a coverage gap in practice: `app/main.py` was already
+exempt from every module-privacy contract (never listed in their
+`source_modules`), and `app/api/v1/router.py` importing sibling files in its
+own layer was never restricted by any contract to begin with.
+
 ## Enforcing boundaries
 
 Everything above is a rule that's easy to violate by accident — an IDE will happily
@@ -183,6 +241,14 @@ facade means adding its module path to contract 6's `modules` list — see
 This also runs as part of the test suite (`tests/test_architecture.py`), so a
 boundary violation shows up as a normal failing test, not a separate step someone
 has to remember to run — see [testing.md](testing.md).
+
+`.github/CODEOWNERS` maps the same module boundaries to code review ownership
+— `.importlinter` enforces who's allowed to *import* a module's internals;
+`CODEOWNERS` enforces who's asked to *review* changes to them. Aligning the
+two is deliberate: a modular monolith's boundaries are meant to track team
+boundaries (Conway's Law), not just import-graph edges. Its placeholders
+(`@your-org/...`) need real users/teams filled in before it does anything —
+GitHub ignores an owner it can't resolve.
 
 ## Physical separation goes one layer deeper on PostgreSQL
 

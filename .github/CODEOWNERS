@@ -1,0 +1,33 @@
+# Maps this template's module boundaries (docs/architecture.md) to code
+# review ownership — the same "who's the source of truth for this module"
+# question .importlinter already enforces at the import-graph level, applied
+# to who reviews changes to it.
+#
+# Every @your-org/... below is a placeholder. GitHub silently ignores an
+# owner it can't resolve to a real user or team, so this file has no effect
+# until you replace them. GitHub CODEOWNERS matching is "last match wins" —
+# more specific paths must come after more general ones, as below.
+
+# Default: anything not matched by a more specific rule further down.
+*                           @your-org/maintainers
+
+# One owner per bounded context — matches the modules .importlinter enforces
+# as private (app/modules/<name>/service.py, repository.py, subscribers.py)
+# and the module's own README.md.
+/app/modules/users/         @your-org/users-team
+/app/modules/products/      @your-org/products-team
+/app/modules/orders/        @your-org/orders-team
+
+# Cross-module orchestration — a facade change is, by definition, touching
+# more than one module's contract at once (see
+# cross-module-communication.md#2-facade--unitofwork--when-you-need-an-atomic-result),
+# so it doesn't belong to a single module owner.
+/app/facades/               @your-org/maintainers
+
+# Shared infrastructure — changes here affect every module's behavior.
+/app/shared/                @your-org/maintainers
+
+# The boundaries themselves, not just the code inside them.
+/.importlinter              @your-org/maintainers
+/mypy.ini                   @your-org/maintainers
+/docs/architecture.md       @your-org/maintainers

@@ -19,9 +19,9 @@ High-cohesion, low-coupling **Modular Monolith** built with:
 
 ```
 app/
-├── main.py                        # FastAPI app entry point
+├── main.py                        # FastAPI app entry point — discovers & wires every module
 ├── api/v1/
-│   ├── router.py                  # Aggregates all v1 routers
+│   ├── router.py                  # Auto-discovers and mounts sibling routers by convention
 │   ├── users.py                   # /api/v1/users endpoints
 │   ├── products.py                # /api/v1/products endpoints
 │   └── orders.py                  # /api/v1/orders endpoints
@@ -61,6 +61,7 @@ app/
     ├── config.py                  # Pydantic settings
     ├── database.py                # Async engine, session factory, UnitOfWork
     ├── events.py                  # In-process event bus (fire-and-forget side effects)
+    ├── registry.py                # Contract registry — modules register; facades resolve
     ├── base_repository.py         # Generic CRUD base
     ├── security.py                # JWT + password hashing
     ├── errors.py                  # Shared base error types

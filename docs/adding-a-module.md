@@ -13,16 +13,19 @@ every step below.
 | `schemas.py` | Pydantic request/response DTOs. |
 | `errors.py` | Domain error dataclasses + a `<Name>Error` union type (`SomeError \| DomainError`). |
 | `events.py` | Optional. Only if the module needs to notify other code without returning a result — see [cross-module-communication.md](cross-module-communication.md#3-domain-events--fire-and-forget-side-effects). |
-| `subscribers.py` | Optional, pairs with `events.py`. A `register_subscribers(bus)` function holding this module's own reactions to its own events (e.g. logging). **Private** — never imported outside the module except by `app/main.py`. See [cross-module-communication.md](cross-module-communication.md#where-subscriptions-are-wired-up). |
+| `subscribers.py` | Optional, pairs with `events.py`. A `register_subscribers(bus)` function holding this module's own reactions to its own events (e.g. logging), followed by `module_registry.register_subscribers(register_subscribers)` at the bottom to self-register it. **Private** — never imported outside the module except by `app/main.py`'s `discover_modules()`. See [cross-module-communication.md](cross-module-communication.md#where-subscriptions-are-wired-up). |
 | `repository.py` | Persistence. Extend `BaseRepository[Model]`, add query methods `get_all`/`get_by_id` don't cover. **Private** — never imported outside the module. |
 | `service.py` | Business logic, returns `Result[T, <Name>Error]`. **Private**. |
 | `public_api.py` | The module's only public surface. See step 2. |
 | `README.md` | Owned table, public surface, published events, dependencies on other modules — copy the structure of `app/modules/orders/README.md`. |
 | `tests/` | This module's own tests — see step 8. |
 
-If you added `subscribers.py`, call its `register_subscribers(event_bus)` from
-`register_event_subscribers()` in `app/main.py` — that's the one place allowed
-to know every module's subscriber-registration function exists.
+If you added `subscribers.py`, its own `module_registry.register_subscribers(...)`
+call (step 1's table) is everything needed to wire it up — nothing to add to
+`app/main.py`. `discover_modules()` (see
+[architecture.md](architecture.md#who-actually-imports-each-module--appmainpys-discover_modules))
+imports every module's `subscribers.py` automatically, which is what triggers
+that self-registration.
 
 ## 2. `public_api.py` shape
 
@@ -39,18 +42,25 @@ Copy this from any existing module — the shape is identical every time:
     publishes any event) when it owns the session — see
     [database.md](database.md#unitofwork) and
     [cross-module-communication.md](cross-module-communication.md#who-publishes-the-event-when-a-facade-drives-the-unitofwork).
-- A module-level singleton at the bottom: `<name>_public_api = <Name>PublicApi()`.
+- A module-level singleton at the bottom: `<name>_public_api = <Name>PublicApi()`,
+  immediately followed by
+  `module_registry.register_contract(<Name>PublicApiProtocol, <name>_public_api)  # type: ignore[type-abstract]`
+  — the `type: ignore` is expected and expl­ained once in
+  `app/shared/registry.py`'s docstring, not a sign something's wrong. A facade
+  can't `resolve()` this module until that line runs.
 
 ## 3. Wire the model into table creation
 
-Three places import every module's `models.py` so its table ends up in
-`Base.metadata` before anything tries to create tables — add the new import to
-all three, or `create_all_tables()`/Alembic/tests silently won't know the table
-exists:
-
-- `app/main.py`
-- `alembic/env.py`
-- `conftest.py` (repo root)
+Only **one** place needs a manual edit now — `alembic/env.py`, which is a
+separate entry point from the running app and has its own model imports
+(`import app.modules.<name>.models`) for autogenerate to see the new table.
+`app/main.py` and `conftest.py` don't need one:
+`app/main.py`'s `discover_modules()` (see
+[architecture.md](architecture.md#who-actually-imports-each-module--appmainpys-discover_modules))
+scans `app/modules/*/` and imports every module's `models.py` automatically,
+and `conftest.py` picks that up for free via `from app.main import app`. Add
+the new module's directory under `app/modules/` and this step is already done
+for anything except Alembic.
 
 ## 4. `.importlinter` — three kinds of changes
 
@@ -104,9 +114,12 @@ writes.
   `HTTPException(status_code=..., detail=err.as_detail())` — not `detail=err.message`
   — so the response matches the rest of the API's `{"error": {"code",
   "message"}}` envelope (see [architecture.md](architecture.md#result-pattern-over-exceptions)).
-  Copy an existing router's error-mapping style.
-- Register it in `app/api/v1/router.py`:
-  `api_v1_router.include_router(<name>_router)`.
+  Copy an existing router's error-mapping style. The `APIRouter` instance must
+  be assigned to a module-level name called exactly `router` —
+  `app/api/v1/router.py`'s `discover_routers()` finds and mounts it by that
+  name; nothing to register by hand, but a typo in the name means the file
+  gets imported and silently never mounted, so double-check against an
+  existing router file if in doubt.
 - List endpoints: add `limit`/`offset` `Query` params (default 50, max 100) —
   see the root README's API table for the convention.
 

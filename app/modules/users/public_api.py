@@ -14,6 +14,7 @@ from app.modules.users.schemas import UserRegisterRequest, UserUpdateRequest
 from app.modules.users.service import UserService
 from app.shared.database import resolve_session
 from app.shared.events import event_bus
+from app.shared.registry import module_registry
 
 
 class UserPublicApiProtocol(Protocol):
@@ -109,3 +110,4 @@ class UserPublicApi:
 
 # Module-level singleton — import this in facades and API routers
 user_public_api = UserPublicApi()
+module_registry.register_contract(UserPublicApiProtocol, user_public_api)  # type: ignore[type-abstract]

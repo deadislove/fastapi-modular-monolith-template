@@ -5,13 +5,14 @@ from result import Err, Ok, Result
 
 from app.modules.products.errors import ProductError
 from app.modules.products.models import Product
-from app.modules.products.public_api import ProductPublicApiProtocol, product_public_api
+from app.modules.products.public_api import ProductPublicApiProtocol
 from app.modules.products.schemas import ProductCreateRequest
 from app.modules.users.errors import UserError
 from app.modules.users.models import User
-from app.modules.users.public_api import UserPublicApiProtocol, user_public_api
+from app.modules.users.public_api import UserPublicApiProtocol
 from app.shared.database import UnitOfWork
 from app.shared.errors import DomainError
+from app.shared.registry import module_registry
 
 
 @dataclass
@@ -77,8 +78,9 @@ class UserProductFacade:
             return product_result
 
 
-# Module-level singleton — wire up via the module singletons
+# Module-level singleton — resolved from the registry, not imported directly:
+# a module must have registered its contract to be usable here.
 user_product_facade = UserProductFacade(
-    user_api=user_public_api,
-    product_api=product_public_api,
+    user_api=module_registry.resolve(UserPublicApiProtocol),  # type: ignore[type-abstract]
+    product_api=module_registry.resolve(ProductPublicApiProtocol),  # type: ignore[type-abstract]
 )

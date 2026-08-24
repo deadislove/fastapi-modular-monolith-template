@@ -1,11 +1,22 @@
+import importlib
+import pkgutil
+
 from fastapi import APIRouter
 
-from app.api.v1.orders import router as orders_router
-from app.api.v1.products import router as products_router
-from app.api.v1.users import router as users_router
+import app.api.v1
 
-# Aggregate all v1 module routers under /api/v1
 api_v1_router = APIRouter(prefix="/api/v1")
-api_v1_router.include_router(users_router)
-api_v1_router.include_router(products_router)
-api_v1_router.include_router(orders_router)
+
+
+def discover_routers() -> None:
+    """Imports every sibling app/api/v1/<name>.py file and mounts its
+    `router` attribute — must run after app.main's discover_modules(), since
+    each router file resolves its module's contract from module_registry at
+    import time."""
+    for _, name, is_pkg in pkgutil.iter_modules(app.api.v1.__path__):
+        if is_pkg or name == "router":
+            continue
+        router_module = importlib.import_module(f"app.api.v1.{name}")
+        # getattr, not router_module.router: a dynamically imported module has
+        # no static type, so direct attribute access would fail mypy instead.
+        api_v1_router.include_router(getattr(router_module, "router"))  # noqa: B009

@@ -14,6 +14,7 @@ from app.modules.orders.repository import OrderRepository
 from app.modules.orders.service import OrderService
 from app.shared.database import resolve_session
 from app.shared.events import event_bus
+from app.shared.registry import module_registry
 
 
 class OrderPublicApiProtocol(Protocol):
@@ -96,3 +97,4 @@ class OrderPublicApi:
 
 # Module-level singleton — import this in facades and API routers
 order_public_api = OrderPublicApi()
+module_registry.register_contract(OrderPublicApiProtocol, order_public_api)  # type: ignore[type-abstract]

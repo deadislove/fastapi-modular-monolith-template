@@ -1,5 +1,6 @@
 import importlib
 import logging
+import pkgutil
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,16 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.v1.router import api_v1_router
-
-# Composition root: aggregates each module's self-registered event subscribers.
-from app.modules.orders.subscribers import register_subscribers as register_orders_subscribers
-from app.modules.users.subscribers import register_subscribers as register_users_subscribers
+import app.modules as _app_modules  # aliased: this file reassigns `app` to the FastAPI instance below
+from app.api.v1.router import api_v1_router, discover_routers
 from app.shared.config import settings
 from app.shared.database import create_all_tables, resolve_session
 from app.shared.events import event_bus
 from app.shared.exception_handler import register_exception_handlers
 from app.shared.rate_limiter import register_rate_limiter
+from app.shared.registry import module_registry
 
 # Without this, app.* loggers propagate to a handler-less root and produce no
 # output at all under `uvicorn app.main:app` — no-op if one already exists.
@@ -25,19 +24,33 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 logger = logging.getLogger(__name__)
 
-# Populates SQLAlchemy metadata before create_all_tables runs.
-importlib.import_module("app.modules.orders.models")
-importlib.import_module("app.modules.products.models")
-importlib.import_module("app.modules.users.models")
+
+def discover_modules() -> None:
+    """Composition root only: imports every app/modules/<name>/ subpackage's
+    models.py (populates SQLAlchemy metadata), public_api.py (self-registers
+    its contract into module_registry), and subscribers.py if present
+    (self-registers its event subscribers). Not in app/shared/ — shared must
+    never import from modules, and this function does exactly that on
+    purpose, so it belongs at the composition root instead."""
+    for _, name, is_pkg in pkgutil.iter_modules(_app_modules.__path__):
+        if not is_pkg:
+            continue
+        importlib.import_module(f"app.modules.{name}.models")
+        importlib.import_module(f"app.modules.{name}.public_api")
+        subscribers_module = f"app.modules.{name}.subscribers"
+        try:
+            importlib.import_module(subscribers_module)
+        except ModuleNotFoundError as exc:
+            if exc.name != subscribers_module:
+                raise
 
 
-def register_event_subscribers() -> None:
-    """Each module self-registers reactions to its own events."""
-    register_users_subscribers(event_bus)
-    register_orders_subscribers(event_bus)
-
-
-register_event_subscribers()
+# Order matters: modules must be discovered (populating module_registry)
+# before discover_routers() imports the router files that resolve facades,
+# which in turn resolve module contracts from the registry.
+discover_modules()
+module_registry.wire_event_subscribers(event_bus)
+discover_routers()
 
 
 @asynccontextmanager

@@ -2,6 +2,7 @@ import logging
 
 from app.modules.orders.events import OrderPlaced
 from app.shared.events import EventBus
+from app.shared.registry import module_registry
 
 logger = logging.getLogger(__name__)
 
@@ -16,3 +17,6 @@ async def _log_order_placed(event: OrderPlaced) -> None:
 def register_subscribers(bus: EventBus) -> None:
     """Only this module's own events — cross-module subscriptions stay in app/main.py."""
     bus.subscribe(OrderPlaced, _log_order_placed)
+
+
+module_registry.register_subscribers(register_subscribers)

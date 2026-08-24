@@ -48,6 +48,7 @@ for why that ordering, and that specific mechanism, is what makes it work.
 | `tests/test_error_envelope.py` | HTTP | Every error shape (404 domain error, 422 validation, 401 auth, 429 rate limit) uses the same `{"error": {"code", "message"}}` envelope |
 | `tests/test_health.py` | HTTP | `/health` is always 200; `/health/ready` reflects real DB reachability (including a simulated-outage case) |
 | `tests/test_config.py` | Unit | `Settings` refuses to construct with `APP_ENV=production` and the default `JWT_SECRET_KEY` |
+| `tests/test_registry.py` | Unit | `ModuleRegistry.resolve()` returns what was registered and raises `LookupError` when nothing was; `register_contract()` rejects registering the same contract twice; `wire_event_subscribers()` calls every registered subscriber registrar |
 
 ## Why `test_create_product_for_user_rolls_back_when_user_missing` exists
 

@@ -12,6 +12,7 @@ Docker, API endpoint list); these docs cover the *why* behind the design.
 | [testing.md](testing.md) | Test suite map, strategy, and the gotchas the suite already ran into |
 | [quality-and-tooling.md](quality-and-tooling.md) | `ruff`/`mypy`/`lint-imports`/`pre-commit`/CI, and the production-readiness guards (JWT secret, rate limiter) |
 | [adding-a-module.md](adding-a-module.md) | Checklist for adding a new module, written from actually adding `orders` |
+| [extraction-playbook.md](extraction-playbook.md) | Analysis only, nothing to run: what it would actually cost to split a module out into its own service, and what the boundary discipline here already buys you toward that |
 
 Each module also documents its own contract next to its code — start there for a
 single module's specifics:
@@ -30,3 +31,6 @@ If you're new to this codebase, read in this order:
    reference material for when you're touching persistence, writing tests, or
    setting up your toolchain.
 4. **adding-a-module.md** — when you're ready to add your own.
+5. **extraction-playbook.md** — optional, once the boundaries themselves make
+   sense: what actually happens if you push on them hard enough to split a
+   module out.

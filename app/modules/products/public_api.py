@@ -12,6 +12,7 @@ from app.modules.products.repository import ProductRepository
 from app.modules.products.schemas import ProductCreateRequest, ProductUpdateRequest
 from app.modules.products.service import ProductService
 from app.shared.database import resolve_session
+from app.shared.registry import module_registry
 
 
 class ProductPublicApiProtocol(Protocol):
@@ -135,3 +136,4 @@ class ProductPublicApi:
 
 # Module-level singleton — import this in facades and API routers
 product_public_api = ProductPublicApi()
+module_registry.register_contract(ProductPublicApiProtocol, product_public_api)  # type: ignore[type-abstract]
