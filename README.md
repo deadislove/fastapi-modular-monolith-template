@@ -230,3 +230,19 @@ Each module also documents its own contract next to its code:
 [`app/modules/users/README.md`](app/modules/users/README.md),
 [`app/modules/products/README.md`](app/modules/products/README.md),
 [`app/modules/orders/README.md`](app/modules/orders/README.md).
+
+---
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup, the checks a PR needs to
+pass, and what this repo expects a change to look like.
+
+## Security
+
+Found a vulnerability? Don't open a public issue — see
+[`SECURITY.md`](SECURITY.md) for how to report it privately.
+
+## License
+
+[MIT](LICENSE) © Da-Wei Lin
