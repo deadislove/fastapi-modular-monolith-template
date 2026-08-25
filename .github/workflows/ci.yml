@@ -30,6 +30,23 @@ jobs:
       - name: Tests
         run: pytest
 
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      # Checks every pinned dependency (including transitive ones) against
+      # the PyPA Advisory Database — catches a known CVE in something already
+      # in requirements.txt, not just newly-added packages.
+      - name: Audit dependencies for known vulnerabilities
+        run: pip-audit -r requirements.txt
+
   postgres-migrations:
     runs-on: ubuntu-latest
     services:

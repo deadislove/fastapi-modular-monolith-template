@@ -79,6 +79,30 @@ run before committing — instead of depending on a separate step nobody remembe
 The test calls `importlinter.cli.lint_imports()` directly (not a subprocess) so it
 doesn't depend on the `lint-imports` console script being on `PATH`.
 
+### A side effect of calling `lint_imports()` in-process: it disables every existing logger
+
+`lint_imports()` calls `logging.config.dictConfig(...)` internally, using
+that library's default `disable_existing_loggers=True` — which sets
+`.disabled = True` on **every logger that already exists**, not just
+import-linter's own. Since this test runs in the same process as the rest of
+the suite (that's the whole point — see above), every `app.*` logger (and
+`sqlalchemy.engine`'s) goes silently disabled for the rest of the session the
+moment this test runs, which alphabetical test discovery puts near the very
+start (`test_architecture.py` sorts early in `tests/`). `test_module_boundaries_are_respected`
+saves and restores every logger's `.disabled` flag around the `lint_imports()`
+call specifically to undo this — without it, any *later* test relying on
+`caplog` silently captures nothing, with no error to point at the cause.
+
+This was almost certainly the real reason behind the next section's original
+`caplog` failure below, not a genuine `BackgroundTasks`/`ASGITransport`
+timing issue as first suspected — confirmed by temporarily switching that
+test back to `caplog` after adding this fix, which then passed. The
+`unittest.mock.patch` version stayed regardless, since it's still the more
+precise test (exact arguments, not just matching text), but if you hit a
+mysteriously-empty `caplog.records` anywhere else in this suite, check
+whether `test_architecture.py` ran before your test in the session, not just
+`await`/timing.
+
 ## A gotcha this suite already ran into: the rate limiter is process-wide
 
 `conftest.py` has an `autouse` fixture, `_reset_rate_limiter`:
@@ -148,10 +172,15 @@ through it matters even with a fully green test suite.
 
 The first version of this test used pytest's `caplog` fixture to look for the
 background task's log line. It failed even though the task demonstrably ran
-(confirmed via the real server, above) — `caplog`'s capture doesn't reliably
-line up with a `BackgroundTasks` callback's execution window when the app is
-driven through `httpx.ASGITransport` in-process. Patching
-`app.api.v1.orders._notify_fulfillment` with `unittest.mock.AsyncMock` and
-asserting `assert_awaited_once_with(...)` is both more reliable and more
-precise — it checks the exact arguments the background task was scheduled
-with, not just that some matching text appeared somewhere in a log.
+(confirmed via the real server, above) — at the time this was attributed to
+`caplog`'s capture not reliably lining up with a `BackgroundTasks` callback's
+execution window under `httpx.ASGITransport`. That diagnosis turned out to be
+incomplete: the real cause was almost certainly
+[`test_architecture.py`'s `lint_imports()` side effect](#a-side-effect-of-calling-lint_imports-in-process-it-disables-every-existing-logger)
+silently disabling every logger earlier in the same test session — confirmed
+by switching this test back to `caplog` after that was fixed, which then
+passed. `unittest.mock.patch` on `app.api.v1.orders._notify_fulfillment` with
+`unittest.mock.AsyncMock`, asserting `assert_awaited_once_with(...)`, stayed
+regardless: it's still more precise than `caplog` would be even with the
+logger bug fixed — it checks the exact arguments the background task was
+scheduled with, not just that some matching text appeared somewhere in a log.

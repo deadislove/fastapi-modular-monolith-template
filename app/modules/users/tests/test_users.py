@@ -62,3 +62,35 @@ async def test_get_me(client: AsyncClient) -> None:
 async def test_get_me_unauthenticated(client: AsyncClient) -> None:
     response = await client.get("/api/v1/users/me")
     assert response.status_code == 401
+
+
+async def test_register_rejects_short_password(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/users/register",
+        json={"email": "shortpw@example.com", "username": "shortpw", "password": "short1"},
+    )
+    assert response.status_code == 422
+
+
+async def test_register_rejects_password_over_bcrypt_byte_limit(client: AsyncClient) -> None:
+    """73 single-byte chars is already over the limit; using a multi-byte
+    character proves the check counts bytes, not Python string length —
+    36 of these 3-byte characters (€, U+20AC) is 108 bytes but only 36
+    characters."""
+    response = await client.post(
+        "/api/v1/users/register",
+        json={
+            "email": "longpw@example.com",
+            "username": "longpw",
+            "password": "€" * 36,
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_register_rejects_short_username(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/users/register",
+        json={"email": "shortname@example.com", "username": "ab", "password": "secret123"},
+    )
+    assert response.status_code == 422

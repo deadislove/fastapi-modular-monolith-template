@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Keeps requirements.txt current — pip-audit (see ci.yml's dependency-audit
+  # job) catches a known vulnerability in what's already pinned; this catches
+  # it before a CVE exists, by not letting versions drift for months.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # GitHub Actions versions (actions/checkout, actions/setup-python, ...)
+  # pinned in .github/workflows/ also go stale and occasionally carry fixes.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

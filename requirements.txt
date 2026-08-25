@@ -20,3 +20,4 @@ import-linter
 mypy
 types-passlib
 pre-commit
+pip-audit

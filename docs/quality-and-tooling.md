@@ -5,14 +5,15 @@ the production-facing guards that don't fit naturally into `testing.md` (about
 the test suite) or `architecture.md` (about module boundaries).
 
 ```bash
-ruff check .   # lint
-mypy           # type check
-lint-imports   # architecture boundary contracts (also runs inside pytest)
-pytest         # tests
+ruff check .              # lint
+mypy                      # type check
+lint-imports               # architecture boundary contracts (also runs inside pytest)
+pytest                    # tests
+pip-audit -r requirements.txt   # known-vulnerability scan
 ```
 
-`.github/workflows/ci.yml` runs exactly these four on every push/PR, plus a
-second job that applies Alembic migrations against a real PostgreSQL service
+`.github/workflows/ci.yml` runs all five across three jobs on every push/PR,
+plus a job that applies Alembic migrations against a real PostgreSQL service
 container — see [CI pipeline](#ci-pipeline) below. `pre-commit` runs the first
 three locally, before you even push — see [Pre-commit hooks](#pre-commit-hooks).
 
@@ -98,11 +99,19 @@ the same bare directory scan CI does — files list and excludes included.
 
 ## CI pipeline
 
-Two jobs, both defined in `.github/workflows/ci.yml`:
+Three jobs, all defined in `.github/workflows/ci.yml`:
 
 - **`lint-and-test`** — `ruff check .`, `mypy`, `lint-imports`, `pytest`, in
   that order, against SQLite (the default `DATABASE_URL`). This is the fast
   feedback loop; it never touches a real database server.
+- **`dependency-audit`** — `pip-audit -r requirements.txt`, checking every
+  pinned dependency (transitive ones included) against the PyPA Advisory
+  Database. Catches a CVE in a package that's already pinned and hasn't
+  changed, not just something newly added — a vulnerability can be disclosed
+  in a dependency you added a year ago just as easily as one you added
+  yesterday. `.github/dependabot.yml` complements this: the audit catches a
+  known vulnerability on every push, Dependabot opens a PR weekly so
+  versions don't drift far enough to make catching up painful.
 - **`postgres-migrations`** — spins up a real `postgres:16-alpine` service
   container and runs `alembic upgrade head` against it. This exists because
   the schema-per-module path (see

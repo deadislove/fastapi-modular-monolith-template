@@ -17,10 +17,17 @@ from app.shared.events import event_bus
 from app.shared.exception_handler import register_exception_handlers
 from app.shared.rate_limiter import register_rate_limiter
 from app.shared.registry import module_registry
+from app.shared.request_context import install_request_id_log_filter, register_request_context
 
 # Without this, app.* loggers propagate to a handler-less root and produce no
 # output at all under `uvicorn app.main:app` — no-op if one already exists.
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s [%(request_id)s]: %(message)s",
+)
+# Must run right after basicConfig, before anything below might log — see
+# install_request_id_log_filter()'s own docstring for why.
+install_request_id_log_filter()
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +92,7 @@ app.add_middleware(
 # --- Cross-cutting concerns ---
 register_rate_limiter(app)
 register_exception_handlers(app)
+register_request_context(app)
 
 # --- Versioned API routes ---
 app.include_router(api_v1_router)
