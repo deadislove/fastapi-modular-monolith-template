@@ -1,0 +1,36 @@
+# The Dockerfile only COPYs requirements.txt, app/, alembic/, and
+# alembic.ini — everything else here just slows down the build context
+# upload and has no reason to reach the Docker daemon.
+
+.git/
+.github/
+
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+.env
+*.db
+*.sqlite3
+
+.vscode/
+.idea/
+.DS_Store
+
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.import_linter_cache/
+.mypy_cache/
+
+tests/
+app/modules/*/tests/
+docs/
+*.md
+
+docker-compose.yml
+.dockerignore
