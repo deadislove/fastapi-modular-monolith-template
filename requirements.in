@@ -12,7 +12,7 @@ pyjwt
 passlib[bcrypt]
 # passlib's bcrypt backend breaks on bcrypt>=4.1 (it sniffs `__about__.__version__`,
 # which bcrypt dropped) — pin until passlib ships a fix.
-bcrypt==4.0.1
+bcrypt==5.0.0
 slowapi
 result
 
