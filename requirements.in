@@ -1,0 +1,28 @@
+# Runtime
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+alembic
+asyncpg
+aiosqlite
+pydantic[email]
+pydantic-settings
+python-multipart
+pyjwt
+passlib[bcrypt]
+# passlib's bcrypt backend breaks on bcrypt>=4.1 (it sniffs `__about__.__version__`,
+# which bcrypt dropped) — pin until passlib ships a fix.
+bcrypt==4.0.1
+slowapi
+result
+
+# Dev / test / tooling
+pytest
+pytest-asyncio
+httpx
+ruff
+import-linter
+mypy
+types-passlib
+pre-commit
+pip-audit
