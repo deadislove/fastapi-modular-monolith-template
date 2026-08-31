@@ -15,7 +15,7 @@ ast-serialize==0.8.0
     # via mypy
 asyncpg==0.31.0
     # via -r requirements.in
-bcrypt==4.0.1
+bcrypt==5.0.0
     # via
     #   -r requirements.in
     #   passlib
