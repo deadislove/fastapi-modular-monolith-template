@@ -59,7 +59,7 @@ filelock==3.32.4
     #   virtualenv
 greenlet==3.5.5
     # via sqlalchemy
-grimp==3.16
+grimp==3.17
     # via import-linter
 h11==0.16.0
     # via
@@ -79,7 +79,7 @@ idna==3.19
     #   email-validator
     #   httpx
     #   requests
-import-linter==2.14
+import-linter==2.15
     # via -r requirements.in
 iniconfig==2.3.0
     # via pytest
