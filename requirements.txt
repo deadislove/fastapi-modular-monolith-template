@@ -1,6 +1,6 @@
 aiosqlite==0.22.1
     # via -r requirements.in
-alembic==1.19.1
+alembic==1.19.2
     # via -r requirements.in
 annotated-doc==0.0.5
     # via fastapi
