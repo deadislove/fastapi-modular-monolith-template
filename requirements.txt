@@ -184,7 +184,7 @@ slowapi==0.1.10
     # via -r requirements.in
 sortedcontainers==2.4.0
     # via cyclonedx-python-lib
-sqlalchemy[asyncio]==2.0.52
+sqlalchemy[asyncio]==2.1.1
     # via
     #   -r requirements.in
     #   alembic
