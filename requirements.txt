@@ -50,7 +50,7 @@ dnspython==2.8.0
     # via email-validator
 email-validator==2.3.0
     # via pydantic
-fastapi==0.141.1
+fastapi==0.143.2
     # via -r requirements.in
 filelock==3.32.4
     # via
@@ -105,6 +105,8 @@ mypy-extensions==1.1.0
     # via mypy
 nodeenv==1.10.0
     # via pre-commit
+opentelemetry-api==1.45.1
+    # via fastapi
 packageurl-python==0.17.6
     # via cyclonedx-python-lib
 packaging==26.3
@@ -203,6 +205,7 @@ typing-extensions==4.16.0
     #   import-linter
     #   limits
     #   mypy
+    #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
